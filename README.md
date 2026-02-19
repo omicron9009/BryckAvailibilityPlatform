@@ -14,18 +14,21 @@ and health of machines used for testing, development, and deployments.
 
 ## Project Structure
 
+## Project Structure
+
+
 BryckAvailabilityPlatform/
 ├── backend/
-│ ├── main.py # FastAPI app + all routes
-│ ├── models.py # SQLAlchemy models
-│ ├── schemas.py # Pydantic schemas
-│ ├── database.py # DB connection
-│ ├── .env # Environment variables
-│ └── requirements.txt
+│   ├── main.py            # FastAPI application and API routes
+│   ├── models.py          # SQLAlchemy ORM models
+│   ├── schemas.py         # Pydantic request/response schemas
+│   ├── database.py        # Database connection and session handling
+│   ├── .env               # Environment variables
+│   └── requirements.txt   # Backend dependencies
+│
 └── frontend/
-└── index.html # Single file frontend
+    └── index.html         # Single-file frontend (HTML/CSS/JS)
 
-text
 
 ---
 
