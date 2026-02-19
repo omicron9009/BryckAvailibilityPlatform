@@ -14,9 +14,6 @@ and health of machines used for testing, development, and deployments.
 
 ## Project Structure
 
-## Project Structure
-
-
 BryckAvailabilityPlatform/
 ├── backend/
 │   ├── main.py            # FastAPI application and API routes
