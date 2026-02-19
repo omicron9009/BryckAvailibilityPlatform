@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bryck Availability Platform</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+<header class="header">
+  <div class="header__inner">
+    <div class="header__brand">
+      <span class="header__logo">⬡</span>
+      <span class="header__title">Bryck Availability Platform</span>
+    </div>
+    <div class="header__actions">
+      <button id="btn-add-machine" class="btn btn--primary">+ Add Machine</button>
+      <button id="btn-refresh" class="btn btn--secondary">↻ Refresh</button>
+      <label class="auto-refresh-label">
+        <input type="checkbox" id="chk-auto-refresh" />
+        Auto (30s)
+      </label>
+    </div>
+  </div>
+</header>
+
+<main class="main">
+
+  <!-- Filters bar -->
+  <section class="filters" aria-label="Filters">
+    <input type="text" id="filter-search" class="filter-input" placeholder="Search IP, build, notes…" />
+    <select id="filter-status" class="filter-select">
+      <option value="">All Statuses</option>
+      <option value="Active">Active</option>
+      <option value="Ready">Ready</option>
+      <option value="Down">Down</option>
+      <option value="Shipped">Shipped</option>
+      <option value="Decommissioned">Decommissioned</option>
+    </select>
+    <select id="filter-used-for" class="filter-select">
+      <option value="">All Uses</option>
+      <option value="Testing">Testing</option>
+      <option value="Development">Development</option>
+      <option value="Customer">Customer</option>
+      <option value="Idle">Idle</option>
+    </select>
+    <select id="filter-type" class="filter-select">
+      <option value="">All Types</option>
+      <option value="Bryck">Bryck</option>
+      <option value="BryckMini">BryckMini</option>
+      <option value="Other">Other</option>
+    </select>
+    <button id="btn-clear-filters" class="btn btn--ghost">✕ Clear</button>
+  </section>
+
+  <!-- Stats bar -->
+  <section class="stats" id="stats-bar" aria-label="Summary stats"></section>
+
+  <!-- Toast container -->
+  <div id="toast-container" role="alert" aria-live="polite"></div>
+
+  <!-- Table -->
+  <section class="table-wrapper">
+    <table class="machine-table" id="machine-table">
+      <thead>
+        <tr>
+          <th>IP Address</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th>Health</th>
+          <th>Used For</th>
+          <th>Allotted To</th>
+          <th>Build</th>
+          <th>Tests Done</th>
+          <th>Parallel</th>
+          <th>Last Checked</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="machine-tbody">
+        <tr id="row-loading">
+          <td colspan="11" class="table-empty">Loading machines…</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Pagination -->
+  <div class="pagination" id="pagination"></div>
+
+</main>
+
+<!-- Add/Edit Modal -->
+<div id="modal-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal">
+    <div class="modal__header">
+      <h2 id="modal-title">Add Machine</h2>
+      <button class="modal__close" id="btn-modal-close" aria-label="Close">✕</button>
+    </div>
+    <form id="machine-form" novalidate>
+      <div class="form-grid">
+
+        <div class="form-group">
+          <label for="f-ip">IP Address *</label>
+          <input type="text" id="f-ip" name="machine_ip" placeholder="192.168.1.10" required />
+          <span class="form-error" id="err-ip"></span>
+        </div>
+
+        <div class="form-group">
+          <label for="f-type">Machine Type</label>
+          <select id="f-type" name="machine_type">
+            <option value="Bryck">Bryck</option>
+            <option value="BryckMini">BryckMini</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="f-status">Status</label>
+          <select id="f-status" name="status">
+            <option value="Ready">Ready</option>
+            <option value="Active">Active</option>
+            <option value="Down">Down</option>
+            <option value="Shipped">Shipped</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="f-used-for">Used For</label>
+          <select id="f-used-for" name="used_for">
+            <option value="Idle">Idle</option>
+            <option value="Testing">Testing</option>
+            <option value="Development">Development</option>
+            <option value="Customer">Customer</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="f-allotted">Allotted To</label>
+          <input type="text" id="f-allotted" name="allotted_to" placeholder="Name or team" />
+        </div>
+
+        <div class="form-group">
+          <label for="f-build">Current Build</label>
+          <input type="text" id="f-build" name="current_build" placeholder="v2.4.1" />
+        </div>
+
+        <div class="form-group">
+          <label for="f-customer">Customer Name</label>
+          <input type="text" id="f-customer" name="customer_name" placeholder="Acme Corp" />
+        </div>
+
+        <div class="form-group">
+          <label for="f-shipping">Shipping Date</label>
+          <input type="datetime-local" id="f-shipping" name="shipping_date" />
+        </div>
+
+        <div class="form-group form-group--full">
+          <label for="f-issues">Active Issues</label>
+          <textarea id="f-issues" name="active_issues" rows="2" placeholder="Describe any current issues"></textarea>
+        </div>
+
+        <div class="form-group form-group--full">
+          <label for="f-notes">Notes</label>
+          <textarea id="f-notes" name="notes" rows="2" placeholder="Free-text notes"></textarea>
+        </div>
+
+        <div class="form-group form-group--checkbox">
+          <label>
+            <input type="checkbox" id="f-parallel" name="can_run_parallel" />
+            Can Run Parallel
+          </label>
+        </div>
+
+      </div>
+
+      <div class="modal__footer">
+        <button type="button" class="btn btn--ghost" id="btn-form-cancel">Cancel</button>
+        <button type="submit" class="btn btn--primary" id="btn-form-submit">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Confirm decommission modal -->
+<div id="confirm-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true">
+  <div class="modal modal--sm">
+    <div class="modal__header">
+      <h2>Decommission Machine</h2>
+      <button class="modal__close" id="btn-confirm-close">✕</button>
+    </div>
+    <p id="confirm-message" class="confirm-text">Are you sure? This is a soft delete.</p>
+    <div class="modal__footer">
+      <button class="btn btn--ghost" id="btn-confirm-cancel">Cancel</button>
+      <button class="btn btn--danger" id="btn-confirm-ok">Decommission</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
