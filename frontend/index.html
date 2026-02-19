@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Bryck Inventory</title>
+  <style>
+    /* ── Reset & Tokens ─────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0f1e;
+      --surface:   #111827;
+      --surface2:  #1a2235;
+      --border:    #1f2d45;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --brand:     #3b82f6;
+      --danger:    #ef4444;
+      --success:   #22c55e;
+      --warn:      #f59e0b;
+      --radius:    8px;
+      --font:      'Inter', system-ui, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────────── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 16px;
+      letter-spacing: .5px;
+    }
+    .brand-icon {
+      width: 28px; height: 28px;
+      background: var(--brand);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px;
+    }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+
+    /* ── Buttons ─────────────────────────────────────────────── */
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: var(--radius);
+      font-family: var(--font);
+      font-size: 13px;
+      font-weight: 500;
+      transition: opacity .15s, background .15s;
+    }
+    button:hover { opacity: .85; }
+
+    .btn-primary {
+      background: var(--brand);
+      color: #fff;
+      padding: 8px 16px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 7px 14px;
+    }
+    .btn-ghost:hover { color: var(--text); border-color: var(--muted); opacity: 1; }
+    .btn-danger {
+      background: transparent;
+      color: var(--danger);
+      border: 1px solid transparent;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 16px;
+    }
+    .btn-danger:hover { background: rgba(239,68,68,.1); opacity: 1; }
+
+    /* ── Stats Bar ───────────────────────────────────────────── */
+    .stats {
+      display: flex;
+      gap: 12px;
+      padding: 20px 32px 0;
+    }
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 20px;
+      min-width: 100px;
+    }
+    .stat-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 4px; }
+    .stat-value { font-size: 22px; font-weight: 700; }
+    .stat-value.active  { color: var(--success); }
+    .stat-value.down    { color: var(--danger); }
+    .stat-value.shipped { color: var(--warn); }
+    .stat-value.total   { color: var(--brand); }
+
+    /* ── Toolbar ─────────────────────────────────────────────── */
+    .toolbar {
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .search-wrap {
+      position: relative;
+      flex: 1;
+      max-width: 320px;
+    }
+    .search-wrap input {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      padding: 8px 12px 8px 34px;
+      font-size: 13px;
+      font-family: var(--font);
+      outline: none;
+    }
+    .search-wrap input:focus { border-color: var(--brand); }
+    .search-icon {
+      position: absolute;
+      left: 10px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      font-size: 14px;
+      pointer-events: none;
+    }
+    .filter-select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: var(--radius);
+      padding: 8px 12px;
+      font-size: 13px;
+      font-family: var(--font);
+      outline: none;
+      cursor: pointer;
+    }
+    .filter-select:focus { border-color: var(--brand); }
+    .filter-select option { background: var(--surface2); }
+
+    /* ── Table Wrapper ───────────────────────────────────────── */
+    .table-wrap {
+      padding: 0 32px 40px;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    thead tr {
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      text-align: left;
+      padding: 10px 12px;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .7px;
+      white-space: nowrap;
+      user-select: none;
+    }
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background .1s;
+    }
+    tbody tr:hover { background: var(--surface2); }
+
+    td {
+      padding: 10px 12px;
+      vertical-align: middle;
+      max-width: 180px;
+    }
+
+    /* ── Editable Cells ──────────────────────────────────────── */
+    .editable {
+      outline: none;
+      border-radius: 4px;
+      padding: 3px 6px;
+      min-width: 60px;
+      display: inline-block;
+      transition: background .15s, box-shadow .15s;
+      word-break: break-word;
+    }
+    .editable:hover { background: rgba(59,130,246,.08); cursor: text; }
+    .editable:focus {
+      background: rgba(59,130,246,.12);
+      box-shadow: 0 0 0 2px rgba(59,130,246,.4);
+    }
+    .editable.empty { color: var(--muted); font-style: italic; }
+
+    /* ── Editable Select ─────────────────────────────────────── */
+    .cell-select {
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      outline: none;
+      cursor: pointer;
+      border-radius: 4px;
+      padding: 3px 4px;
+      width: 100%;
+    }
+    .cell-select:hover { background: rgba(59,130,246,.08); }
+    .cell-select:focus { background: rgba(59,130,246,.12); box-shadow: 0 0 0 2px rgba(59,130,246,.4); }
+    .cell-select option { background: var(--surface2); color: var(--text); }
+
+    /* ── Badges ──────────────────────────────────────────────── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .3px;
+      pointer-events: none;
+    }
+    .badge::before {
+      content: '';
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .badge.Active  { color: var(--success); background: rgba(34,197,94,.1); }
+    .badge.Ready   { color: var(--brand);   background: rgba(59,130,246,.1); }
+    .badge.Down    { color: var(--danger);  background: rgba(239,68,68,.1); }
+    .badge.Shipped { color: var(--warn);    background: rgba(245,158,11,.1); }
+    .badge.Idle    { color: var(--muted);   background: rgba(100,116,139,.1); }
+
+    /* Status cell wraps badge + hidden select */
+    .status-cell { position: relative; cursor: pointer; }
+    .status-cell .cell-select {
+      position: absolute; inset: 0;
+      opacity: 0;
+      width: 100%;
+      cursor: pointer;
+    }
+
+    /* ── Parallel Toggle ─────────────────────────────────────── */
+    .toggle {
+      width: 36px; height: 20px;
+      border-radius: 10px;
+      background: var(--border);
+      position: relative;
+      cursor: pointer;
+      transition: background .2s;
+      border: none;
+      flex-shrink: 0;
+    }
+    .toggle.on { background: var(--brand); }
+    .toggle::after {
+      content: '';
+      position: absolute;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      top: 3px; left: 3px;
+      transition: transform .2s;
+    }
+    .toggle.on::after { transform: translateX(16px); }
+
+    /* ── IP Cell ─────────────────────────────────────────────── */
+    .ip-cell {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .ip-text { font-family: monospace; font-size: 13px; color: var(--brand); }
+
+    /* ── Empty & Loading ─────────────────────────────────────── */
+    .empty-row td {
+      text-align: center;
+      padding: 48px;
+      color: var(--muted);
+    }
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid var(--border);
+      border-top-color: var(--brand);
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Toast ───────────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 18px;
+      font-size: 13px;
+      color: var(--text);
+      opacity: 0;
+      transform: translateY(8px);
+      transition: all .25s;
+      z-index: 9999;
+      pointer-events: none;
+      max-width: 300px;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+    #toast.ok   { border-color: var(--success); color: var(--success); }
+    #toast.err  { border-color: var(--danger);  color: var(--danger); }
+
+    /* ── Modal ───────────────────────────────────────────────── */
+    .modal-backdrop {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.6);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 540px;
+      max-width: 95vw;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .modal-header {
+      padding: 20px 24px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-header h2 { font-size: 16px; font-weight: 600; }
+    .modal-close {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-size: 20px;
+      cursor: pointer;
+      line-height: 1;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .modal-close:hover { color: var(--text); background: var(--surface2); opacity: 1; }
+    .modal-body { padding: 20px 24px; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group.full { grid-column: 1 / -1; }
+    .form-group label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; font-weight: 600; }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 9px 12px;
+      font-size: 13px;
+      font-family: var(--font);
+      outline: none;
+    }
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus { border-color: var(--brand); }
+    .form-group select option { background: var(--surface2); }
+    .form-group textarea { resize: vertical; min-height: 70px; }
+    .modal-footer {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    /* ── Scrollbar ───────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="brand">
+    <div class="brand-icon">⬡</div>
+    Bryck Inventory
+  </div>
+  <div class="header-right">
+    <span id="machine-count" style="color:var(--muted);font-size:12px;"></span>
+    <button class="btn-primary" onclick="openAddModal()">＋ Add Machine</button>
+  </div>
+</header>
+
+<!-- Stats -->
+<div class="stats" id="stats"></div>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="search-wrap">
+    <span class="search-icon">⌕</span>
+    <input type="text" id="search" placeholder="Search IP, hostname, owner…" oninput="renderTable()"/>
+  </div>
+  <select class="filter-select" id="f-status" onchange="renderTable()">
+    <option value="">All Status</option>
+  </select>
+  <select class="filter-select" id="f-type" onchange="renderTable()">
+    <option value="">All Types</option>
+  </select>
+  <select class="filter-select" id="f-used" onchange="renderTable()">
+    <option value="">All Usage</option>
+  </select>
+</div>
+
+<!-- Table -->
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>IP Address</th>
+        <th>Hostname</th>
+        <th>Type</th>
+        <th>Status</th>
+        <th>Used For</th>
+        <th>Allotted To</th>
+        <th>Parallel</th>
+        <th>Build</th>
+        <th>Tests</th>
+        <th>Health</th>
+        <th>Issues</th>
+        <th>Customer</th>
+        <th>Ship Date</th>
+        <th>Notes</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Add Machine Modal -->
+<div class="modal-backdrop" id="modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Add Machine</h2>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>IP Address *</label>
+          <input id="f-ip" placeholder="192.168.1.10" />
+        </div>
+        <div class="form-group">
+          <label>Hostname</label>
+          <input id="f-hostname" placeholder="bryck-lab-01" />
+        </div>
+        <div class="form-group">
+          <label>Machine Type</label>
+          <select id="f-mtype"></select>
+        </div>
+        <div class="form-group">
+          <label>Status</label>
+          <select id="f-mstatus"></select>
+        </div>
+        <div class="form-group">
+          <label>Used For</label>
+          <select id="f-usedfor"></select>
+        </div>
+        <div class="form-group">
+          <label>Allotted To</label>
+          <input id="f-allotted" placeholder="Person or team" />
+        </div>
+        <div class="form-group">
+          <label>Current Build</label>
+          <input id="f-build" placeholder="v2.1.4" />
+        </div>
+        <div class="form-group">
+          <label>Tests Completed</label>
+          <input id="f-tests" placeholder="42 or Na" />
+        </div>
+        <div class="form-group">
+          <label>Customer</label>
+          <input id="f-customer" placeholder="Acme Corp" />
+        </div>
+        <div class="form-group">
+          <label>Shipping Date</label>
+          <input id="f-shipdate" type="date" />
+        </div>
+        <div class="form-group">
+          <label>Parallel Use</label>
+          <select id="f-parallel">
+            <option value="false">No</option>
+            <option value="true">Yes</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Active Issues</label>
+          <input id="f-issues" placeholder="Short summary or Na" />
+        </div>
+        <div class="form-group full">
+          <label>Notes</label>
+          <textarea id="f-notes" placeholder="Free text…"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn-primary" onclick="addMachine()">Add Machine</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API = 'http://localhost:8000';
+  let machines = [];
+  let opts = { status: [], usedFor: [], machineType: [] };
+
+  // ── Boot ──────────────────────────────────────────────────────
+  async function boot() {
+    const [s, u, t] = await Promise.all([
+      fetch(`${API}/inventory/options/status`).then(r => r.json()),
+      fetch(`${API}/inventory/options/used-for`).then(r => r.json()),
+      fetch(`${API}/inventory/options/machine-type`).then(r => r.json()),
+    ]);
+    opts.status      = s;
+    opts.usedFor     = u;
+    opts.machineType = t;
+    populateFilters();
+    populateModalSelects();
+    await loadMachines();
+  }
+
+  function populateFilters() {
+    populateSelect('f-status', opts.status, 'All Status');
+    populateSelect('f-type',   opts.machineType, 'All Types');
+    populateSelect('f-used',   opts.usedFor, 'All Usage');
+  }
+
+  function populateSelect(id, arr, placeholder) {
+    const el = document.getElementById(id);
+    const first = el.options[0];
+    el.innerHTML = '';
+    if (placeholder) { el.appendChild(first); }
+    arr.forEach(v => { const o = new Option(v, v); el.appendChild(o); });
+  }
+
+  function populateModalSelects() {
+    const blank = '<option value="">— select —</option>';
+    ['f-mtype','f-mstatus','f-usedfor'].forEach(id => {
+      document.getElementById(id).innerHTML = blank;
+    });
+    opts.machineType.forEach(v => document.getElementById('f-mtype').add(new Option(v, v)));
+    opts.status.forEach(v => document.getElementById('f-mstatus').add(new Option(v, v)));
+    opts.usedFor.forEach(v => document.getElementById('f-usedfor').add(new Option(v, v)));
+  }
+
+  // ── Load ──────────────────────────────────────────────────────
+  async function loadMachines() {
+    document.getElementById('tbody').innerHTML =
+      `<tr class="empty-row"><td colspan="15"><span class="spinner"></span></td></tr>`;
+    const res = await fetch(`${API}/inventory`);
+    machines = await res.json();
+    renderTable();
+    renderStats();
+  }
+
+  // ── Stats ─────────────────────────────────────────────────────
+  function renderStats() {
+    const counts = machines.reduce((acc, m) => {
+      acc.total++;
+      acc[m.status] = (acc[m.status] || 0) + 1;
+      return acc;
+    }, { total: 0 });
+
+    document.getElementById('machine-count').textContent =
+      `${counts.total} machine${counts.total !== 1 ? 's' : ''}`;
+
+    document.getElementById('stats').innerHTML = [
+      ['Total',   counts.total,            'total'],
+      ['Active',  counts.Active  || 0,     'active'],
+      ['Down',    counts.Down    || 0,     'down'],
+      ['Shipped', counts.Shipped || 0,     'shipped'],
+      ['Idle',    counts.Idle    || 0,     'total'],
+    ].map(([label, val, cls]) => `
+      <div class="stat">
+        <div class="stat-label">${label}</div>
+        <div class="stat-value ${cls}">${val}</div>
+      </div>`).join('');
+  }
+
+  // ── Render Table ──────────────────────────────────────────────
+  function renderTable() {
+    const q    = document.getElementById('search').value.toLowerCase();
+    const fSt  = document.getElementById('f-status').value;
+    const fTy  = document.getElementById('f-type').value;
+    const fUs  = document.getElementById('f-used').value;
+
+    const rows = machines.filter(m => {
+      if (fSt && m.status       !== fSt) return false;
+      if (fTy && m.machine_type !== fTy) return false;
+      if (fUs && m.used_for     !== fUs) return false;
+      if (q) {
+        const hay = [m.ip_address, m.hostname, m.allotted_to, m.customer, m.notes]
+          .join(' ').toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
+    const tbody = document.getElementById('tbody');
+    if (!rows.length) {
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="15">No machines found</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = rows.map(m => `
+      <tr data-id="${m.id}">
+        <td>
+          <div class="ip-cell">
+            <span class="ip-text">${m.ip_address || '—'}</span>
+          </div>
+        </td>
+        <td><span class="editable" contenteditable="true"
+          data-field="hostname" data-id="${m.id}"
+          onblur="saveCell(this)"
+          onkeydown="cellKey(event,this)"
+          >${m.hostname || ''}</span></td>
+        <td>
+          <select class="cell-select" data-field="machine_type" data-id="${m.id}"
+            onchange="saveSelect(this)">
+            ${opts.machineType.map(v =>
+              `<option value="${v}" ${m.machine_type === v ? 'selected' : ''}>${v}</option>`
+            ).join('')}
+          </select>
+        </td>
+        <td class="status-cell">
+          <span class="badge ${m.status || 'Idle'}">${m.status || 'Idle'}</span>
+          <select class="cell-select" data-field="status" data-id="${m.id}"
+            onchange="saveStatusSelect(this)">
+            ${opts.status.map(v =>
+              `<option value="${v}" ${m.status === v ? 'selected' : ''}>${v}</option>`
+            ).join('')}
+          </select>
+        </td>
+        <td>
+          <select class="cell-select" data-field="used_for" data-id="${m.id}"
+            onchange="saveSelect(this)">
+            ${opts.usedFor.map(v =>
+              `<option value="${v}" ${m.used_for === v ? 'selected' : ''}>${v}</option>`
+            ).join('')}
+          </select>
+        </td>
+        <td><span class="editable" contenteditable="true"
+          data-field="allotted_to" data-id="${m.id}"
+          onblur="saveCell(this)" onkeydown="cellKey(event,this)"
+          >${m.allotted_to || ''}</span></td>
+        <td style="text-align:center">
+          <button class="toggle ${m.can_parallel ? 'on' : ''}"
+            data-field="can_parallel" data-id="${m.id}"
+            onclick="toggleParallel(this)"></button>
+        </td>
+        <td><span class="editable" contenteditable="true"
+          data-field="current_build" data-id="${m.id}"
+          onblur="saveCell(this)" onkeydown="cellKey(event,this)"
+          >${m.current_build || ''}</span></td>
+        <td><span class="editable" contenteditable="true"
+          data-field="tests_completed" data-id="${m.id}"
+          onblur="saveCell(this)" onkeydown="cellKey(event,this)"
+          >${m.tests_completed || ''}</span></td>
+        <td><span class="editable" contenteditable="true"
+          data-field="last_health_status" data-id="${m.id}"
+          onblur="saveCell(this)" onkeydown="cellKey(event,this)"
+          >${m.last_health_status || ''}</span></td>
+        <td><span class="editable" contenteditable="true"
+          data-field="active_issues" data-id="${m.id}"
+          onblur="saveCell(this)" onkeydown="cellKey(event,this)"
+          >${m.active_issues || ''}</span></td>
+        <td><span class="editable" contenteditable="true"
+          data-field="customer" data-id="${m.id}"
+          onblur="saveCell(this)" onkeydown="cellKey(event,this)"
+          >${m.customer || ''}</span></td>
+        <td><span class="editable" contenteditable="true"
+          data-field="shipping_date" data-id="${m.id}"
+          onblur="saveCell(this)" onkeydown="cellKey(event,this)"
+          >${m.shipping_date || ''}</span></td>
+        <td style="max-width:200px"><span class="editable" contenteditable="true"
+          data-field="notes" data-id="${m.id}"
+          onblur="saveCell(this)" onkeydown="cellKey(event,this)"
+          style="white-space:pre-wrap"
+          >${m.notes || ''}</span></td>
+        <td>
+          <button class="btn-danger" onclick="deleteMachine(${m.id})" title="Remove">✕</button>
+        </td>
+      </tr>`).join('');
+  }
+
+  // ── Cell Editing ──────────────────────────────────────────────
+  function cellKey(e, el) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); el.blur(); }
+    if (e.key === 'Escape') { el.blur(); }
+  }
+
+  async function saveCell(el) {
+    const id    = el.dataset.id;
+    const field = el.dataset.field;
+    const value = el.innerText.trim();
+    await patch(id, { [field]: value || null });
+  }
+
+  async function saveSelect(el) {
+    await patch(el.dataset.id, { [el.dataset.field]: el.value });
+  }
+
+  async function saveStatusSelect(el) {
+    const row   = el.closest('tr');
+    const badge = row.querySelector('.badge');
+    badge.className = `badge ${el.value}`;
+    badge.textContent = el.value;
+    await patch(el.dataset.id, { status: el.value });
+  }
+
+  async function toggleParallel(btn) {
+    const isOn = btn.classList.toggle('on');
+    await patch(btn.dataset.id, { can_parallel: isOn });
+  }
+
+  // ── PATCH ─────────────────────────────────────────────────────
+  async function patch(id, body) {
+    try {
+      const res = await fetch(`${API}/inventory/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error();
+      const updated = await res.json();
+      machines = machines.map(m => m.id == id ? updated : m);
+      renderStats();
+      toast('Saved', 'ok');
+    } catch {
+      toast('Save failed', 'err');
+    }
+  }
+
+  // ── Delete ────────────────────────────────────────────────────
+  async function deleteMachine(id) {
+    if (!confirm('Remove this machine from inventory?')) return;
+    const res = await fetch(`${API}/inventory/${id}`, { method: 'DELETE' });
+    if (res.ok || res.status === 204) {
+      machines = machines.filter(m => m.id !== id);
+      renderTable();
+      renderStats();
+      toast('Machine removed', 'ok');
+    } else {
+      toast('Delete failed', 'err');
+    }
+  }
+
+  // ── Add Machine ───────────────────────────────────────────────
+  function openAddModal()  { document.getElementById('modal').classList.add('open'); }
+  function closeModal()    { document.getElementById('modal').classList.remove('open'); }
+
+  async function addMachine() {
+    const ip = document.getElementById('f-ip').value.trim();
+    if (!ip) { toast('IP address is required', 'err'); return; }
+
+    const payload = {
+      ip_address:      ip,
+      hostname:        v('f-hostname'),
+      machine_type:    v('f-mtype'),
+      status:          v('f-mstatus') || 'Ready',
+      used_for:        v('f-usedfor'),
+      allotted_to:     v('f-allotted'),
+      current_build:   v('f-build'),
+      tests_completed: v('f-tests'),
+      customer:        v('f-customer'),
+      shipping_date:   v('f-shipdate') || null,
+      can_parallel:    document.getElementById('f-parallel').value === 'true',
+      active_issues:   v('f-issues'),
+      notes:           v('f-notes'),
+    };
+
+    const res = await fetch(`${API}/inventory`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (res.status === 201) {
+      const m = await res.json();
+      machines.unshift(m);
+      renderTable();
+      renderStats();
+      closeModal();
+      clearForm();
+      toast('Machine added', 'ok');
+    } else if (res.status === 409) {
+      toast('IP already exists', 'err');
+    } else {
+      toast('Failed to add', 'err');
+    }
+  }
+
+  function v(id) {
+    const el = document.getElementById(id);
+    return el ? el.value.trim() || null : null;
+  }
+
+  function clearForm() {
+    ['f-ip','f-hostname','f-allotted','f-build','f-tests',
+     'f-customer','f-shipdate','f-issues','f-notes'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+  }
+
+  // ── Toast ─────────────────────────────────────────────────────
+  let toastTimer;
+  function toast(msg, type = 'ok') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = `show ${type}`;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.className = ''; }, 2200);
+  }
+
+  // ── Close modal on backdrop click ─────────────────────────────
+  document.getElementById('modal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal();
+  });
+
+  boot();
+</script>
+</body>
+</html>

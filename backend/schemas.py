@@ -1,0 +1,38 @@
+from pydantic import BaseModel
+from typing import Optional
+from datetime import date, datetime
+
+class MachineBase(BaseModel):
+    ip_address:         str
+    hostname:           Optional[str] = None
+    machine_type:       Optional[str] = None
+    status:             Optional[str] = "Ready"
+    status_checked_at:  Optional[datetime] = None
+    used_for:           Optional[str] = None
+    allotted_to:        Optional[str] = None
+    can_parallel:       Optional[bool] = False
+    current_build:      Optional[str] = None
+    tests_completed:    Optional[str] = None
+    active_issues:      Optional[str] = None
+    notes:              Optional[str] = None
+    last_health_status: Optional[str] = None
+    is_reachable:       Optional[bool] = None
+    reachable_via:      Optional[str] = None
+    customer:           Optional[str] = None
+    shipping_date:      Optional[date] = None
+    can_parallel: Optional[bool] = False
+
+
+class MachineCreate(MachineBase):
+    pass
+
+class MachineUpdate(MachineBase):
+    ip_address: Optional[str] = None   # allow partial updates
+
+class MachineOut(MachineBase):
+    id:         int
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
