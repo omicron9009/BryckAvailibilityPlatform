@@ -16,7 +16,7 @@ TEST_SUITES = [
     "Stress Shipment Test",
     "Web Shipment Test",
     "Reboot Shipment Test",
-    "Cloud Transfer Shipment Test"
+    "Cloud Transfer Test"
 ]
 # [test_config_shipment, test_stress_shipment, test_web_shipment, test_reboot_shipment, test_cloud_transfer_shipment]
 
