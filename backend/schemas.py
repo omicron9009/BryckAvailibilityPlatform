@@ -4,6 +4,7 @@ from datetime import date, datetime
 
 class MachineBase(BaseModel):
     ip_address:         str
+    ibmi_bmc:           Optional[str] = None
     hostname:           Optional[str] = None
     machine_type:       Optional[str] = None
     status:             Optional[str] = "Ready"
@@ -14,13 +15,13 @@ class MachineBase(BaseModel):
     current_build:      Optional[str] = None
     tests_completed:    Optional[str] = None
     active_issues:      Optional[str] = None
+    test_status:        Optional[dict[str, bool]] = None
     notes:              Optional[str] = None
     last_health_status: Optional[str] = None
     is_reachable:       Optional[bool] = None
     reachable_via:      Optional[str] = None
     customer:           Optional[str] = None
     shipping_date:      Optional[date] = None
-    can_parallel: Optional[bool] = False
 
 
 class MachineCreate(MachineBase):

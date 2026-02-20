@@ -265,6 +265,68 @@
       cursor: pointer;
     }
 
+    .suite-picker {
+      position: relative;
+      min-width: 220px;
+    }
+    .suite-trigger {
+      width: 100%;
+      justify-content: space-between;
+      color: var(--text);
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+    .suite-menu {
+      display: none;
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      width: 320px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      z-index: 40;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+    }
+    .suite-menu.open { display: block; }
+    .suite-list {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .suite-option {
+      display: grid;
+      grid-template-columns: minmax(120px, 1fr) auto auto;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 4px;
+      border-bottom: 1px solid rgba(31, 45, 69, 0.8);
+    }
+    .suite-option:last-child { border-bottom: none; }
+    .suite-name {
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .suite-name.suite-off {
+      color: var(--muted);
+      text-decoration: line-through;
+    }
+    .suite-flag {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+    .suite-flag input { accent-color: var(--brand); }
+
     /* ── Parallel Toggle ─────────────────────────────────────── */
     .toggle {
       width: 36px; height: 20px;
@@ -451,6 +513,7 @@
     <thead>
       <tr>
         <th>IP Address</th>
+        <th>IBMi/BMC</th>
         <th>Hostname</th>
         <th>Type</th>
         <th>Status</th>
@@ -459,6 +522,7 @@
         <th>Parallel</th>
         <th>Build</th>
         <th>Tests</th>
+        <th>Test Status</th>
         <th>Health</th>
         <th>Issues</th>
         <th>Customer</th>
@@ -490,6 +554,10 @@
         <div class="form-group">
           <label>Hostname</label>
           <input id="f-hostname" placeholder="bryck-lab-01" />
+        </div>
+        <div class="form-group">
+          <label>IBMi/BMC</label>
+          <input id="f-ibmi-bmc" placeholder="192.168.1.11" />
         </div>
         <div class="form-group">
           <label>Machine Type</label>
@@ -535,6 +603,10 @@
           <input id="f-issues" placeholder="Short summary or Na" />
         </div>
         <div class="form-group full">
+          <label>Test Status</label>
+          <div class="suite-list" id="f-test-status"></div>
+        </div>
+        <div class="form-group full">
           <label>Notes</label>
           <textarea id="f-notes" placeholder="Free text…"></textarea>
         </div>
@@ -548,60 +620,246 @@
 </div>
 
 <script>
-  const API = 'http://localhost:8000';
+  const API = "http://localhost:8000";
   let machines = [];
-  let opts = { status: [], usedFor: [], machineType: [] };
+  let opts = { status: [], usedFor: [], machineType: [], testSuites: [] };
 
-  // ── Boot ──────────────────────────────────────────────────────
   async function boot() {
-    const [s, u, t] = await Promise.all([
-      fetch(`${API}/inventory/options/status`).then(r => r.json()),
-      fetch(`${API}/inventory/options/used-for`).then(r => r.json()),
-      fetch(`${API}/inventory/options/machine-type`).then(r => r.json()),
-    ]);
-    opts.status      = s;
-    opts.usedFor     = u;
-    opts.machineType = t;
-    populateFilters();
-    populateModalSelects();
-    await loadMachines();
+    try {
+      const [status, usedFor, machineType, testSuites] = await Promise.all([
+        fetch(`${API}/inventory/options/status`).then(r => r.json()),
+        fetch(`${API}/inventory/options/used-for`).then(r => r.json()),
+        fetch(`${API}/inventory/options/machine-type`).then(r => r.json()),
+        fetch(`${API}/inventory/options/test-suites`).then(r => r.json()),
+      ]);
+
+      opts.status = status;
+      opts.usedFor = usedFor;
+      opts.machineType = machineType;
+      opts.testSuites = testSuites;
+
+      populateFilters();
+      populateModalSelects();
+      renderModalTestSuites();
+      await loadMachines();
+    } catch {
+      toast("Failed to load startup data", "err");
+    }
   }
 
   function populateFilters() {
-    populateSelect('f-status', opts.status, 'All Status');
-    populateSelect('f-type',   opts.machineType, 'All Types');
-    populateSelect('f-used',   opts.usedFor, 'All Usage');
+    populateSelect("f-status", opts.status, "All Status");
+    populateSelect("f-type", opts.machineType, "All Types");
+    populateSelect("f-used", opts.usedFor, "All Usage");
   }
 
   function populateSelect(id, arr, placeholder) {
     const el = document.getElementById(id);
     const first = el.options[0];
-    el.innerHTML = '';
-    if (placeholder) { el.appendChild(first); }
-    arr.forEach(v => { const o = new Option(v, v); el.appendChild(o); });
+    el.innerHTML = "";
+    if (placeholder && first) {
+      el.appendChild(first);
+    }
+    arr.forEach(v => {
+      const o = new Option(v, v);
+      el.appendChild(o);
+    });
   }
 
   function populateModalSelects() {
-    const blank = '<option value="">— select —</option>';
-    ['f-mtype','f-mstatus','f-usedfor'].forEach(id => {
+    const blank = '<option value="">- select -</option>';
+    ["f-mtype", "f-mstatus", "f-usedfor"].forEach(id => {
       document.getElementById(id).innerHTML = blank;
     });
-    opts.machineType.forEach(v => document.getElementById('f-mtype').add(new Option(v, v)));
-    opts.status.forEach(v => document.getElementById('f-mstatus').add(new Option(v, v)));
-    opts.usedFor.forEach(v => document.getElementById('f-usedfor').add(new Option(v, v)));
+
+    opts.machineType.forEach(v => document.getElementById("f-mtype").add(new Option(v, v)));
+    opts.status.forEach(v => document.getElementById("f-mstatus").add(new Option(v, v)));
+    opts.usedFor.forEach(v => document.getElementById("f-usedfor").add(new Option(v, v)));
   }
 
-  // ── Load ──────────────────────────────────────────────────────
+  function renderModalTestSuites() {
+    const wrap = document.getElementById("f-test-status");
+    if (!wrap) return;
+
+    wrap.innerHTML = opts.testSuites.map(suite => `
+      <div class="suite-option">
+        <span class="suite-name suite-off">${suite}</span>
+        <label class="suite-flag">
+          <input
+            type="checkbox"
+            data-role="include"
+            data-suite="${suite}"
+            onchange="toggleModalSuiteInclude(this)"
+          />
+          include
+        </label>
+        <label class="suite-flag">
+          <input type="checkbox" data-role="done" data-suite="${suite}" disabled />
+          complete
+        </label>
+      </div>
+    `).join("");
+  }
+
+  function toggleModalSuiteInclude(input) {
+    const row = input.closest(".suite-option");
+    if (!row) return;
+
+    const doneInput = row.querySelector('input[data-role="done"]');
+    const name = row.querySelector(".suite-name");
+    if (doneInput) {
+      doneInput.disabled = !input.checked;
+      if (!input.checked) doneInput.checked = false;
+    }
+    if (name) {
+      name.classList.toggle("suite-off", !input.checked);
+    }
+  }
+
+  function getModalTestStatus() {
+    const status = {};
+    document.querySelectorAll("#f-test-status .suite-option").forEach(row => {
+      const includeInput = row.querySelector('input[data-role="include"]');
+      const doneInput = row.querySelector('input[data-role="done"]');
+      if (!includeInput || !doneInput || !includeInput.checked) return;
+
+      status[includeInput.dataset.suite] = !!doneInput.checked;
+    });
+
+    return Object.keys(status).length ? status : null;
+  }
+
+  function normalizeTestStatus(value) {
+    if (!value || typeof value !== "object") return {};
+
+    const out = {};
+    Object.entries(value).forEach(([suite, completed]) => {
+      if (!opts.testSuites.includes(suite)) return;
+      out[suite] = !!completed;
+    });
+    return out;
+  }
+
+  function getTestStatusSummary(value) {
+    const status = normalizeTestStatus(value);
+    const suites = Object.keys(status);
+    if (!suites.length) return "Select tests";
+
+    const done = suites.filter(s => status[s]).length;
+    return `${done}/${suites.length} complete`;
+  }
+
+  function renderSuiteMenu(machine) {
+    const status = normalizeTestStatus(machine.test_status);
+
+    return `
+      <div class="suite-picker">
+        <button class="btn-ghost suite-trigger" onclick="toggleSuiteMenu(event, ${machine.id})">
+          ${getTestStatusSummary(status)}
+        </button>
+        <div class="suite-menu" id="suite-menu-${machine.id}" onclick="event.stopPropagation()">
+          ${opts.testSuites.map(suite => {
+            const included = Object.prototype.hasOwnProperty.call(status, suite);
+            const done = included ? status[suite] : false;
+
+            return `
+              <div class="suite-option">
+                <span class="suite-name ${included ? "" : "suite-off"}">${suite}</span>
+                <label class="suite-flag">
+                  <input
+                    type="checkbox"
+                    data-machine-id="${machine.id}"
+                    data-suite="${suite}"
+                    data-kind="include"
+                    ${included ? "checked" : ""}
+                    onchange="onSuiteToggle(this)"
+                  />
+                  include
+                </label>
+                <label class="suite-flag">
+                  <input
+                    type="checkbox"
+                    data-machine-id="${machine.id}"
+                    data-suite="${suite}"
+                    data-kind="done"
+                    ${done ? "checked" : ""}
+                    ${included ? "" : "disabled"}
+                    onchange="onSuiteToggle(this)"
+                  />
+                  complete
+                </label>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  function closeAllSuiteMenus(exceptMachineId = null) {
+    document.querySelectorAll(".suite-menu.open").forEach(menu => {
+      if (exceptMachineId && menu.id === `suite-menu-${exceptMachineId}`) return;
+      menu.classList.remove("open");
+    });
+  }
+
+  function toggleSuiteMenu(event, machineId) {
+    event.stopPropagation();
+    const menu = document.getElementById(`suite-menu-${machineId}`);
+    if (!menu) return;
+
+    const shouldOpen = !menu.classList.contains("open");
+    closeAllSuiteMenus(machineId);
+    menu.classList.toggle("open", shouldOpen);
+  }
+
+  async function onSuiteToggle(input) {
+    const machineId = Number(input.dataset.machineId);
+    const suite = input.dataset.suite;
+    const kind = input.dataset.kind;
+
+    const machine = machines.find(m => m.id === machineId);
+    if (!machine || !suite || !kind) return;
+
+    const status = normalizeTestStatus(machine.test_status);
+    const row = input.closest(".suite-option");
+    const doneInput = row ? row.querySelector('input[data-kind="done"]') : null;
+    const includeInput = row ? row.querySelector('input[data-kind="include"]') : null;
+    const name = row ? row.querySelector(".suite-name") : null;
+
+    if (kind === "include") {
+      if (input.checked) {
+        status[suite] = status[suite] ?? false;
+      } else {
+        delete status[suite];
+      }
+    } else if (kind === "done") {
+      if (!Object.prototype.hasOwnProperty.call(status, suite)) return;
+      status[suite] = input.checked;
+    }
+
+    if (doneInput && includeInput) {
+      doneInput.disabled = !includeInput.checked;
+      if (!includeInput.checked) doneInput.checked = false;
+    }
+    if (name && includeInput) {
+      name.classList.toggle("suite-off", !includeInput.checked);
+    }
+
+    const payload = Object.keys(status).length ? status : {};
+    await patch(machineId, { test_status: payload }, { rerenderTable: true, quiet: true });
+  }
+
   async function loadMachines() {
-    document.getElementById('tbody').innerHTML =
-      `<tr class="empty-row"><td colspan="15"><span class="spinner"></span></td></tr>`;
+    document.getElementById("tbody").innerHTML =
+      `<tr class="empty-row"><td colspan="17"><span class="spinner"></span></td></tr>`;
+
     const res = await fetch(`${API}/inventory`);
     machines = await res.json();
     renderTable();
     renderStats();
   }
 
-  // ── Stats ─────────────────────────────────────────────────────
   function renderStats() {
     const counts = machines.reduce((acc, m) => {
       acc.total++;
@@ -609,44 +867,53 @@
       return acc;
     }, { total: 0 });
 
-    document.getElementById('machine-count').textContent =
-      `${counts.total} machine${counts.total !== 1 ? 's' : ''}`;
+    document.getElementById("machine-count").textContent =
+      `${counts.total} machine${counts.total !== 1 ? "s" : ""}`;
 
-    document.getElementById('stats').innerHTML = [
-      ['Total',   counts.total,            'total'],
-      ['Active',  counts.Active  || 0,     'active'],
-      ['Down',    counts.Down    || 0,     'down'],
-      ['Shipped', counts.Shipped || 0,     'shipped'],
-      ['Idle',    counts.Idle    || 0,     'total'],
+    document.getElementById("stats").innerHTML = [
+      ["Total", counts.total, "total"],
+      ["Active", counts.Active || 0, "active"],
+      ["Down", counts.Down || 0, "down"],
+      ["Shipped", counts.Shipped || 0, "shipped"],
+      ["Idle", counts.Idle || 0, "total"],
     ].map(([label, val, cls]) => `
       <div class="stat">
         <div class="stat-label">${label}</div>
         <div class="stat-value ${cls}">${val}</div>
-      </div>`).join('');
+      </div>
+    `).join("");
   }
 
-  // ── Render Table ──────────────────────────────────────────────
   function renderTable() {
-    const q    = document.getElementById('search').value.toLowerCase();
-    const fSt  = document.getElementById('f-status').value;
-    const fTy  = document.getElementById('f-type').value;
-    const fUs  = document.getElementById('f-used').value;
+    const q = document.getElementById("search").value.toLowerCase();
+    const fSt = document.getElementById("f-status").value;
+    const fTy = document.getElementById("f-type").value;
+    const fUs = document.getElementById("f-used").value;
 
     const rows = machines.filter(m => {
-      if (fSt && m.status       !== fSt) return false;
+      if (fSt && m.status !== fSt) return false;
       if (fTy && m.machine_type !== fTy) return false;
-      if (fUs && m.used_for     !== fUs) return false;
+      if (fUs && m.used_for !== fUs) return false;
       if (q) {
-        const hay = [m.ip_address, m.hostname, m.allotted_to, m.customer, m.notes]
-          .join(' ').toLowerCase();
+        const suiteText = Object.keys(normalizeTestStatus(m.test_status)).join(" ");
+        const hay = [
+          m.ip_address,
+          m.ibmi_bmc,
+          m.hostname,
+          m.allotted_to,
+          m.customer,
+          m.notes,
+          suiteText,
+        ].join(" ").toLowerCase();
+
         if (!hay.includes(q)) return false;
       }
       return true;
     });
 
-    const tbody = document.getElementById('tbody');
+    const tbody = document.getElementById("tbody");
     if (!rows.length) {
-      tbody.innerHTML = `<tr class="empty-row"><td colspan="15">No machines found</td></tr>`;
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="17">No machines found</td></tr>`;
       return;
     }
 
@@ -654,91 +921,100 @@
       <tr data-id="${m.id}">
         <td>
           <div class="ip-cell">
-            <span class="ip-text">${m.ip_address || '—'}</span>
+            <span class="ip-text">${m.ip_address || "-"}</span>
           </div>
         </td>
         <td><span class="editable" contenteditable="true"
+          data-field="ibmi_bmc" data-id="${m.id}"
+          onblur="saveCell(this)" onkeydown="cellKey(event,this)"
+          >${m.ibmi_bmc || ""}</span></td>
+        <td><span class="editable" contenteditable="true"
           data-field="hostname" data-id="${m.id}"
-          onblur="saveCell(this)"
-          onkeydown="cellKey(event,this)"
-          >${m.hostname || ''}</span></td>
+          onblur="saveCell(this)" onkeydown="cellKey(event,this)"
+          >${m.hostname || ""}</span></td>
         <td>
           <select class="cell-select" data-field="machine_type" data-id="${m.id}"
             onchange="saveSelect(this)">
             ${opts.machineType.map(v =>
-              `<option value="${v}" ${m.machine_type === v ? 'selected' : ''}>${v}</option>`
-            ).join('')}
+              `<option value="${v}" ${m.machine_type === v ? "selected" : ""}>${v}</option>`
+            ).join("")}
           </select>
         </td>
         <td class="status-cell">
-          <span class="badge ${m.status || 'Idle'}">${m.status || 'Idle'}</span>
+          <span class="badge ${m.status || "Idle"}">${m.status || "Idle"}</span>
           <select class="cell-select" data-field="status" data-id="${m.id}"
             onchange="saveStatusSelect(this)">
             ${opts.status.map(v =>
-              `<option value="${v}" ${m.status === v ? 'selected' : ''}>${v}</option>`
-            ).join('')}
+              `<option value="${v}" ${m.status === v ? "selected" : ""}>${v}</option>`
+            ).join("")}
           </select>
         </td>
         <td>
           <select class="cell-select" data-field="used_for" data-id="${m.id}"
             onchange="saveSelect(this)">
             ${opts.usedFor.map(v =>
-              `<option value="${v}" ${m.used_for === v ? 'selected' : ''}>${v}</option>`
-            ).join('')}
+              `<option value="${v}" ${m.used_for === v ? "selected" : ""}>${v}</option>`
+            ).join("")}
           </select>
         </td>
         <td><span class="editable" contenteditable="true"
           data-field="allotted_to" data-id="${m.id}"
           onblur="saveCell(this)" onkeydown="cellKey(event,this)"
-          >${m.allotted_to || ''}</span></td>
+          >${m.allotted_to || ""}</span></td>
         <td style="text-align:center">
-          <button class="toggle ${m.can_parallel ? 'on' : ''}"
+          <button class="toggle ${m.can_parallel ? "on" : ""}"
             data-field="can_parallel" data-id="${m.id}"
             onclick="toggleParallel(this)"></button>
         </td>
         <td><span class="editable" contenteditable="true"
           data-field="current_build" data-id="${m.id}"
           onblur="saveCell(this)" onkeydown="cellKey(event,this)"
-          >${m.current_build || ''}</span></td>
+          >${m.current_build || ""}</span></td>
         <td><span class="editable" contenteditable="true"
           data-field="tests_completed" data-id="${m.id}"
           onblur="saveCell(this)" onkeydown="cellKey(event,this)"
-          >${m.tests_completed || ''}</span></td>
+          >${m.tests_completed || ""}</span></td>
+        <td>${renderSuiteMenu(m)}</td>
         <td><span class="editable" contenteditable="true"
           data-field="last_health_status" data-id="${m.id}"
           onblur="saveCell(this)" onkeydown="cellKey(event,this)"
-          >${m.last_health_status || ''}</span></td>
+          >${m.last_health_status || ""}</span></td>
         <td><span class="editable" contenteditable="true"
           data-field="active_issues" data-id="${m.id}"
           onblur="saveCell(this)" onkeydown="cellKey(event,this)"
-          >${m.active_issues || ''}</span></td>
+          >${m.active_issues || ""}</span></td>
         <td><span class="editable" contenteditable="true"
           data-field="customer" data-id="${m.id}"
           onblur="saveCell(this)" onkeydown="cellKey(event,this)"
-          >${m.customer || ''}</span></td>
+          >${m.customer || ""}</span></td>
         <td><span class="editable" contenteditable="true"
           data-field="shipping_date" data-id="${m.id}"
           onblur="saveCell(this)" onkeydown="cellKey(event,this)"
-          >${m.shipping_date || ''}</span></td>
-        <td style="max-width:200px"><span class="editable" contenteditable="true"
+          >${m.shipping_date || ""}</span></td>
+        <td style="max-width:220px"><span class="editable" contenteditable="true"
           data-field="notes" data-id="${m.id}"
           onblur="saveCell(this)" onkeydown="cellKey(event,this)"
           style="white-space:pre-wrap"
-          >${m.notes || ''}</span></td>
+          >${m.notes || ""}</span></td>
         <td>
-          <button class="btn-danger" onclick="deleteMachine(${m.id})" title="Remove">✕</button>
+          <button class="btn-danger" onclick="deleteMachine(${m.id})" title="Remove">x</button>
         </td>
-      </tr>`).join('');
+      </tr>
+    `).join("");
   }
 
-  // ── Cell Editing ──────────────────────────────────────────────
   function cellKey(e, el) {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); el.blur(); }
-    if (e.key === 'Escape') { el.blur(); }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      el.blur();
+    }
+    if (e.key === "Escape") {
+      el.blur();
+    }
   }
 
   async function saveCell(el) {
-    const id    = el.dataset.id;
+    const id = el.dataset.id;
     const field = el.dataset.field;
     const value = el.innerText.trim();
     await patch(id, { [field]: value || null });
@@ -749,123 +1025,190 @@
   }
 
   async function saveStatusSelect(el) {
-    const row   = el.closest('tr');
-    const badge = row.querySelector('.badge');
+    const row = el.closest("tr");
+    const badge = row.querySelector(".badge");
     badge.className = `badge ${el.value}`;
     badge.textContent = el.value;
     await patch(el.dataset.id, { status: el.value });
   }
 
   async function toggleParallel(btn) {
-    const isOn = btn.classList.toggle('on');
+    const isOn = btn.classList.toggle("on");
     await patch(btn.dataset.id, { can_parallel: isOn });
   }
 
-  // ── PATCH ─────────────────────────────────────────────────────
-  async function patch(id, body) {
+  async function readErrorMessage(res) {
+    try {
+      const data = await res.json();
+      if (typeof data?.detail === "string") return data.detail;
+      if (Array.isArray(data?.detail)) {
+        return data.detail.map(item => item.msg || JSON.stringify(item)).join(", ");
+      }
+    } catch {
+      // no-op
+    }
+    return "Request failed";
+  }
+
+  async function patch(id, body, options = {}) {
     try {
       const res = await fetch(`${API}/inventory/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error();
+
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res));
+      }
+
       const updated = await res.json();
-      machines = machines.map(m => m.id == id ? updated : m);
+      machines = machines.map(m => (m.id == id ? updated : m));
+      if (options.rerenderTable) {
+        renderTable();
+      }
       renderStats();
-      toast('Saved', 'ok');
-    } catch {
-      toast('Save failed', 'err');
+      if (!options.quiet) {
+        toast("Saved", "ok");
+      }
+    } catch (err) {
+      toast(err.message || "Save failed", "err");
     }
   }
 
-  // ── Delete ────────────────────────────────────────────────────
   async function deleteMachine(id) {
-    if (!confirm('Remove this machine from inventory?')) return;
-    const res = await fetch(`${API}/inventory/${id}`, { method: 'DELETE' });
+    if (!confirm("Remove this machine from inventory?")) return;
+
+    const res = await fetch(`${API}/inventory/${id}`, { method: "DELETE" });
     if (res.ok || res.status === 204) {
       machines = machines.filter(m => m.id !== id);
       renderTable();
       renderStats();
-      toast('Machine removed', 'ok');
+      toast("Machine removed", "ok");
     } else {
-      toast('Delete failed', 'err');
+      toast("Delete failed", "err");
     }
   }
 
-  // ── Add Machine ───────────────────────────────────────────────
-  function openAddModal()  { document.getElementById('modal').classList.add('open'); }
-  function closeModal()    { document.getElementById('modal').classList.remove('open'); }
+  function openAddModal() {
+    document.getElementById("modal").classList.add("open");
+  }
+
+  function closeModal() {
+    document.getElementById("modal").classList.remove("open");
+  }
 
   async function addMachine() {
-    const ip = document.getElementById('f-ip').value.trim();
-    if (!ip) { toast('IP address is required', 'err'); return; }
+    const ip = document.getElementById("f-ip").value.trim();
+    if (!ip) {
+      toast("IP address is required", "err");
+      return;
+    }
 
     const payload = {
-      ip_address:      ip,
-      hostname:        v('f-hostname'),
-      machine_type:    v('f-mtype'),
-      status:          v('f-mstatus') || 'Ready',
-      used_for:        v('f-usedfor'),
-      allotted_to:     v('f-allotted'),
-      current_build:   v('f-build'),
-      tests_completed: v('f-tests'),
-      customer:        v('f-customer'),
-      shipping_date:   v('f-shipdate') || null,
-      can_parallel:    document.getElementById('f-parallel').value === 'true',
-      active_issues:   v('f-issues'),
-      notes:           v('f-notes'),
+      ip_address: ip,
+      ibmi_bmc: v("f-ibmi-bmc"),
+      hostname: v("f-hostname"),
+      machine_type: v("f-mtype"),
+      status: v("f-mstatus") || "Ready",
+      used_for: v("f-usedfor"),
+      allotted_to: v("f-allotted"),
+      current_build: v("f-build"),
+      tests_completed: v("f-tests"),
+      test_status: getModalTestStatus(),
+      customer: v("f-customer"),
+      shipping_date: v("f-shipdate") || null,
+      can_parallel: document.getElementById("f-parallel").value === "true",
+      active_issues: v("f-issues"),
+      notes: v("f-notes"),
     };
 
     const res = await fetch(`${API}/inventory`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
     if (res.status === 201) {
-      const m = await res.json();
-      machines.unshift(m);
+      const machine = await res.json();
+      machines.unshift(machine);
       renderTable();
       renderStats();
       closeModal();
       clearForm();
-      toast('Machine added', 'ok');
-    } else if (res.status === 409) {
-      toast('IP already exists', 'err');
+      toast("Machine added", "ok");
     } else {
-      toast('Failed to add', 'err');
+      const message = await readErrorMessage(res);
+      toast(message, "err");
     }
   }
 
   function v(id) {
     const el = document.getElementById(id);
-    return el ? el.value.trim() || null : null;
+    return el ? (el.value.trim() || null) : null;
   }
 
   function clearForm() {
-    ['f-ip','f-hostname','f-allotted','f-build','f-tests',
-     'f-customer','f-shipdate','f-issues','f-notes'].forEach(id => {
-      document.getElementById(id).value = '';
+    [
+      "f-ip",
+      "f-ibmi-bmc",
+      "f-hostname",
+      "f-allotted",
+      "f-build",
+      "f-tests",
+      "f-customer",
+      "f-shipdate",
+      "f-issues",
+      "f-notes",
+    ].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = "";
+    });
+
+    resetModalTestSuites();
+  }
+
+  function resetModalTestSuites() {
+    document.querySelectorAll("#f-test-status .suite-option").forEach(row => {
+      const includeInput = row.querySelector('input[data-role="include"]');
+      const doneInput = row.querySelector('input[data-role="done"]');
+      const name = row.querySelector(".suite-name");
+
+      if (includeInput) includeInput.checked = false;
+      if (doneInput) {
+        doneInput.checked = false;
+        doneInput.disabled = true;
+      }
+      if (name) {
+        name.classList.add("suite-off");
+      }
     });
   }
 
-  // ── Toast ─────────────────────────────────────────────────────
   let toastTimer;
-  function toast(msg, type = 'ok') {
-    const el = document.getElementById('toast');
+  function toast(msg, type = "ok") {
+    const el = document.getElementById("toast");
     el.textContent = msg;
     el.className = `show ${type}`;
+
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { el.className = ''; }, 2200);
+    toastTimer = setTimeout(() => {
+      el.className = "";
+    }, 2200);
   }
 
-  // ── Close modal on backdrop click ─────────────────────────────
-  document.getElementById('modal').addEventListener('click', e => {
+  document.getElementById("modal").addEventListener("click", e => {
     if (e.target === e.currentTarget) closeModal();
+  });
+
+  document.addEventListener("click", e => {
+    if (!e.target.closest(".suite-picker")) {
+      closeAllSuiteMenus();
+    }
   });
 
   boot();
 </script>
 </body>
 </html>
+
