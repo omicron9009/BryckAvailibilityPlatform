@@ -12,11 +12,13 @@ from schemas import MachineCreate, MachineUpdate, MachineOut
 # Base.metadata.drop_all(bind=engine)   
 
 TEST_SUITES = [
-    "Test suite 1",
-    "Test suite 2",
-    "Test suite 3",
-    "Test suite 4",
+    "Config Shipment Test",
+    "Stress Shipment Test",
+    "Web Shipment Test",
+    "Reboot Shipment Test",
+    "Cloud Transfer Shipment Test"
 ]
+# [test_config_shipment, test_stress_shipment, test_web_shipment, test_reboot_shipment, test_cloud_transfer_shipment]
 
 Base.metadata.create_all(bind=engine)
 
