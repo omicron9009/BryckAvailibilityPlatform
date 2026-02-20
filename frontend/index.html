@@ -216,6 +216,7 @@
     col.c-host     { width: 90px; }
     col.c-type     { width: 105px; }
     col.c-status   { width: 95px; }
+    col.c-priority { width: 90px; }
     col.c-usedfor  { width: 95px; }
     col.c-allotted { width: 115px; }
     col.c-parallel { width: 62px; }
@@ -269,7 +270,7 @@
     }
 
     /* Notes column wraps */
-    td:nth-child(16) {
+    td:nth-child(17) {
       white-space: normal;
       word-break: break-word;
     }
@@ -637,6 +638,7 @@
       <col class="c-host">
       <col class="c-type">
       <col class="c-status">
+      <col class="c-priority">
       <col class="c-usedfor">
       <col class="c-allotted">
       <col class="c-parallel">
@@ -657,6 +659,7 @@
         <th>Hostname</th>
         <th>Type</th>
         <th>Status</th>
+        <th>Priority</th>
         <th>Used For</th>
         <th>Allotted To</th>
         <th>Parallel</th>
@@ -707,6 +710,10 @@
         <div class="form-group">
           <label>Status</label>
           <select id="f-mstatus"></select>
+        </div>
+        <div class="form-group">
+          <label>Priority</label>
+          <select id="f-priority"></select>
         </div>
         <div class="form-group">
           <label>Used For</label>
@@ -762,22 +769,29 @@
 
 <script>
   const API = "http://localhost:8000";
+  const DEFAULT_PRIORITY_OPTIONS = [
+    { label: "High", value: 0 },
+    { label: "Medium", value: 1 },
+    { label: "Low", value: 2 },
+  ];
   let machines = [];
-  let opts = { status: [], usedFor: [], machineType: [], testSuites: [] };
+  let opts = { status: [], usedFor: [], machineType: [], testSuites: [], priority: DEFAULT_PRIORITY_OPTIONS };
 
   async function boot() {
     try {
-      const [status, usedFor, machineType, testSuites] = await Promise.all([
+      const [status, usedFor, machineType, testSuites, priority] = await Promise.all([
         fetch(`${API}/inventory/options/status`).then(r => r.json()),
         fetch(`${API}/inventory/options/used-for`).then(r => r.json()),
         fetch(`${API}/inventory/options/machine-type`).then(r => r.json()),
         fetch(`${API}/inventory/options/test-suites`).then(r => r.json()),
+        fetch(`${API}/inventory/options/priority`).then(r => r.json()),
       ]);
 
       opts.status = status;
       opts.usedFor = usedFor;
       opts.machineType = machineType;
       opts.testSuites = testSuites;
+      opts.priority = normalizePriorityOptions(priority);
 
       populateFilters();
       populateModalSelects();
@@ -807,15 +821,45 @@
     });
   }
 
+  function normalizePriorityOptions(rawOptions) {
+    if (!Array.isArray(rawOptions)) {
+      return DEFAULT_PRIORITY_OPTIONS;
+    }
+
+    const normalized = rawOptions
+      .map(item => {
+        if (typeof item !== "object" || item === null) return null;
+        const value = Number(item.value);
+        const label = String(item.label || "").trim();
+        if (!Number.isInteger(value) || !label || value < 0 || value > 2) return null;
+        return { value, label };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.value - b.value);
+
+    return normalized.length ? normalized : DEFAULT_PRIORITY_OPTIONS;
+  }
+
+  function normalizePriorityValue(value) {
+    const parsed = Number(value);
+    if (parsed === 0 || parsed === 1 || parsed === 2) return parsed;
+    return 2;
+  }
+
   function populateModalSelects() {
     const blank = '<option value="">- select -</option>';
-    ["f-mtype", "f-mstatus", "f-usedfor"].forEach(id => {
+    ["f-mtype", "f-mstatus", "f-usedfor", "f-priority"].forEach(id => {
       document.getElementById(id).innerHTML = blank;
     });
 
     opts.machineType.forEach(v => document.getElementById("f-mtype").add(new Option(v, v)));
     opts.status.forEach(v => document.getElementById("f-mstatus").add(new Option(v, v)));
     opts.usedFor.forEach(v => document.getElementById("f-usedfor").add(new Option(v, v)));
+    document.getElementById("f-priority").innerHTML = "";
+    opts.priority.forEach(({ label, value }) => {
+      document.getElementById("f-priority").add(new Option(label, String(value)));
+    });
+    document.getElementById("f-priority").value = "2";
   }
 
   function renderModalTestSuites() {
@@ -1001,7 +1045,7 @@
 
   async function loadMachines() {
     document.getElementById("tbody").innerHTML =
-      `<tr class="empty-row"><td colspan="17"><span class="spinner"></span></td></tr>`;
+      `<tr class="empty-row"><td colspan="18"><span class="spinner"></span></td></tr>`;
 
     const res = await fetch(`${API}/inventory`);
     machines = await res.json();
@@ -1045,10 +1089,12 @@
       if (fUs && m.used_for !== fUs) return false;
       if (q) {
         const suiteText = Object.keys(normalizeTestStatus(m.test_status)).join(" ");
+        const priorityText = (opts.priority.find(p => p.value === normalizePriorityValue(m.priority)) || {}).label || "";
         const hay = [
           m.ip_address,
           m.ibmi_bmc,
           m.hostname,
+          priorityText,
           m.allotted_to,
           m.customer,
           m.notes,
@@ -1059,10 +1105,17 @@
       }
       return true;
     });
+    rows.sort((a, b) => {
+      const priorityDiff = normalizePriorityValue(a.priority) - normalizePriorityValue(b.priority);
+      if (priorityDiff !== 0) return priorityDiff;
+      const timeA = Date.parse(a.created_at || 0) || 0;
+      const timeB = Date.parse(b.created_at || 0) || 0;
+      return timeB - timeA;
+    });
 
     const tbody = document.getElementById("tbody");
     if (!rows.length) {
-      tbody.innerHTML = `<tr class="empty-row"><td colspan="17">No machines found</td></tr>`;
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="18">No machines found</td></tr>`;
       return;
     }
 
@@ -1095,6 +1148,14 @@
             onchange="saveStatusSelect(this)">
             ${opts.status.map(v =>
               `<option value="${v}" ${m.status === v ? "selected" : ""}>${v}</option>`
+            ).join("")}
+          </select>
+        </td>
+        <td>
+          <select class="cell-select" data-field="priority" data-id="${m.id}"
+            onchange="savePrioritySelect(this)">
+            ${opts.priority.map(p =>
+              `<option value="${p.value}" ${normalizePriorityValue(m.priority) === p.value ? "selected" : ""}>${p.label}</option>`
             ).join("")}
           </select>
         </td>
@@ -1171,6 +1232,14 @@
 
   async function saveSelect(el) {
     await patch(el.dataset.id, { [el.dataset.field]: el.value });
+  }
+
+  async function savePrioritySelect(el) {
+    await patch(
+      el.dataset.id,
+      { priority: normalizePriorityValue(el.value) },
+      { rerenderTable: true }
+    );
   }
 
   async function saveStatusSelect(el) {
@@ -1260,6 +1329,7 @@
       hostname: v("f-hostname"),
       machine_type: v("f-mtype"),
       status: v("f-mstatus") || "Ready",
+      priority: normalizePriorityValue(document.getElementById("f-priority").value),
       used_for: v("f-usedfor"),
       allotted_to: v("f-allotted"),
       current_build: v("f-build"),
@@ -1302,6 +1372,7 @@
       "f-ip",
       "f-ibmi-bmc",
       "f-hostname",
+      "f-priority",
       "f-allotted",
       "f-build",
       "f-tests",
@@ -1313,6 +1384,8 @@
       const el = document.getElementById(id);
       if (el) el.value = "";
     });
+    const prioritySelect = document.getElementById("f-priority");
+    if (prioritySelect) prioritySelect.value = "2";
 
     resetModalTestSuites();
   }

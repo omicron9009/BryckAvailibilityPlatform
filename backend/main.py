@@ -19,6 +19,11 @@ TEST_SUITES = [
     "Cloud Transfer Test"
 ]
 # [test_config_shipment, test_stress_shipment, test_web_shipment, test_reboot_shipment, test_cloud_transfer_shipment]
+PRIORITY_OPTIONS = [
+    {"label": "High", "value": 0},
+    {"label": "Medium", "value": 1},
+    {"label": "Low", "value": 2},
+]
 
 Base.metadata.create_all(bind=engine)
 
@@ -40,6 +45,9 @@ def ensure_machine_columns() -> None:
             )
         if "test_status" not in existing_columns:
             conn.execute(text("ALTER TABLE machines ADD COLUMN test_status JSON"))
+        if "priority" not in existing_columns:
+            conn.execute(text("ALTER TABLE machines ADD COLUMN priority INTEGER DEFAULT 2"))
+            conn.execute(text("UPDATE machines SET priority = 2 WHERE priority IS NULL"))
 
 
 def normalize_test_status(test_status: Optional[dict[str, bool]]) -> Optional[dict[str, bool]]:
@@ -58,6 +66,14 @@ def normalize_test_status(test_status: Optional[dict[str, bool]]) -> Optional[di
     return normalized
 
 
+def normalize_priority(priority: Optional[int]) -> Optional[int]:
+    if priority is None:
+        return None
+    if priority not in {0, 1, 2}:
+        raise HTTPException(status_code=422, detail="priority must be 0 (High), 1 (Medium), or 2 (Low)")
+    return priority
+
+
 ensure_machine_columns()
 
 app = FastAPI(title="Bryck Inventory API", version="1.0.0")
@@ -73,6 +89,7 @@ app.add_middleware(
 @app.get("/inventory", response_model=list[MachineOut])
 def list_machines(
     status:       Optional[str] = Query(None),
+    priority:     Optional[int] = Query(None),
     used_for:     Optional[str] = Query(None),
     machine_type: Optional[str] = Query(None),
     allotted_to:  Optional[str] = Query(None),
@@ -80,6 +97,9 @@ def list_machines(
 ):
     q = db.query(Machine)
     if status:       q = q.filter(Machine.status == status)
+    if priority is not None:
+        normalized_priority = normalize_priority(priority)
+        q = q.filter(Machine.priority == normalized_priority)
     if used_for:     q = q.filter(Machine.used_for == used_for)
     if machine_type: q = q.filter(Machine.machine_type == machine_type)
     if allotted_to:  q = q.filter(Machine.allotted_to == allotted_to)
@@ -108,6 +128,9 @@ def add_machine(payload: MachineCreate, db: Session = Depends(get_db)):
 
     payload_data = payload.model_dump()
     payload_data["test_status"] = normalize_test_status(payload_data.get("test_status"))
+    payload_data["priority"] = normalize_priority(payload_data.get("priority"))
+    if payload_data["priority"] is None:
+        payload_data["priority"] = 2
 
     machine = Machine(**payload_data)
     db.add(machine)
@@ -136,6 +159,10 @@ def edit_machine(machine_id: int, payload: MachineUpdate, db: Session = Depends(
 
     if "test_status" in updates:
         updates["test_status"] = normalize_test_status(updates["test_status"])
+    if "priority" in updates:
+        updates["priority"] = normalize_priority(updates["priority"])
+        if updates["priority"] is None:
+            updates["priority"] = 2
 
     for field, value in updates.items():
         setattr(machine, field, value)
@@ -171,3 +198,7 @@ def machine_type_options():
 @app.get("/inventory/options/test-suites")
 def test_suite_options():
     return TEST_SUITES
+
+@app.get("/inventory/options/priority")
+def priority_options():
+    return PRIORITY_OPTIONS

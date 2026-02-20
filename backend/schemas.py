@@ -8,6 +8,7 @@ class MachineBase(BaseModel):
     hostname:           Optional[str] = None
     machine_type:       Optional[str] = None
     status:             Optional[str] = "Ready"
+    priority:           Optional[int] = 2
     status_checked_at:  Optional[datetime] = None
     used_for:           Optional[str] = None
     allotted_to:        Optional[str] = None

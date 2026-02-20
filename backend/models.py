@@ -11,6 +11,7 @@ class Machine(Base):
     hostname          = Column(String(255))
     machine_type      = Column(String(50))
     status            = Column(String(50), default="Ready")
+    priority          = Column(Integer, default=2, nullable=False)
     status_checked_at = Column(DateTime)
     used_for          = Column(String(50))
     allotted_to       = Column(String(150))
