@@ -1,0 +1,1654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Bryck Inventory</title>
+  <style>
+    /* ── Reset & Tokens ─────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0f1e;
+      --surface:   #111827;
+      --surface2:  #1a2235;
+      --border:    #1f2d45;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --brand:     #3b82f6;
+      --danger:    #ef4444;
+      --success:   #22c55e;
+      --warn:      #f59e0b;
+      --radius:    8px;
+      --font:      'Inter', system-ui, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      min-height: 100vh;
+      overflow: hidden; /* prevent body scroll — table scrolls instead */
+    }
+
+    /* ── Header ─────────────────────────────────────────────── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 1px 20px rgba(0,0,0,0.4);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 16px;
+      letter-spacing: .5px;
+    }
+    .brand-icon {
+      width: 28px; height: 28px;
+      background: var(--brand);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px;
+      box-shadow: 0 0 14px rgba(59,130,246,0.5);
+    }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+
+    /* ── Buttons ─────────────────────────────────────────────── */
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: var(--radius);
+      font-family: var(--font);
+      font-size: 13px;
+      font-weight: 500;
+      transition: opacity .15s, background .15s, box-shadow .15s;
+    }
+    button:hover { opacity: .85; }
+
+    .btn-primary {
+      background: var(--brand);
+      color: #fff;
+      padding: 8px 16px;
+      display: flex; align-items: center; gap: 6px;
+      box-shadow: 0 0 12px rgba(59,130,246,0.3);
+    }
+    .btn-primary:hover {
+      box-shadow: 0 0 20px rgba(59,130,246,0.5);
+      opacity: 1;
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 7px 14px;
+    }
+    .btn-ghost:hover { color: var(--text); border-color: var(--muted); opacity: 1; }
+    .btn-danger {
+      background: transparent;
+      color: var(--danger);
+      border: 1px solid transparent;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 14px;
+      transition: all .15s;
+    }
+    .btn-danger:hover {
+      background: rgba(239,68,68,.15);
+      border-color: rgba(239,68,68,.3);
+      box-shadow: 0 0 8px rgba(239,68,68,.2);
+      opacity: 1;
+    }
+
+    /* ── Stats Bar ───────────────────────────────────────────── */
+    .stats {
+      display: flex;
+      gap: 12px;
+      padding: 16px 32px 0;
+    }
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 20px;
+      min-width: 100px;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .stat:hover {
+      border-color: rgba(59,130,246,0.3);
+      box-shadow: 0 0 12px rgba(59,130,246,0.08);
+    }
+    .stat-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 4px; }
+    .stat-value { font-size: 22px; font-weight: 700; }
+    .stat-value.active  { color: var(--success); }
+    .stat-value.down    { color: var(--danger); }
+    .stat-value.shipped { color: var(--warn); }
+    .stat-value.total   { color: var(--brand); }
+
+    /* ── Toolbar ─────────────────────────────────────────────── */
+    .toolbar {
+      padding: 12px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .search-wrap {
+      position: relative;
+      flex: 1;
+      max-width: 320px;
+    }
+    .search-wrap input {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      padding: 8px 12px 8px 34px;
+      font-size: 13px;
+      font-family: var(--font);
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .search-wrap input:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+    }
+    .search-icon {
+      position: absolute;
+      left: 10px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      font-size: 14px;
+      pointer-events: none;
+    }
+    .filter-select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: var(--radius);
+      padding: 8px 12px;
+      font-size: 13px;
+      font-family: var(--font);
+      outline: none;
+      cursor: pointer;
+      transition: border-color .2s;
+    }
+    .filter-select:focus { border-color: var(--brand); }
+    .filter-select option { background: var(--surface2); }
+
+    /* ── Table Wrapper ───────────────────────────────────────── */
+    .table-wrap {
+      overflow-x: auto;
+      overflow-y: auto;
+      /* fills remaining height: header(56) + stats(~82) + toolbar(~52) + margins */
+      height: calc(100vh - 56px - 82px - 52px - 24px);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin: 0 32px 24px;
+      box-shadow:
+        0 0 0 1px var(--border),
+        0 8px 32px rgba(0,0,0,0.4),
+        inset 0 1px 0 rgba(255,255,255,0.03);
+      background: var(--surface);
+      position: relative;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      table-layout: fixed;
+    }
+
+    /* ── Column Widths ───────────────────────────────────────── */
+    col.c-ip       { width: 170px; }
+    col.c-ibmi     { width: 150px; }
+    col.c-host     { width: 150px; }
+    col.c-type     { width: 105px; }
+    col.c-status   { width: 95px; }
+    col.c-priority { width: 90px; }
+    col.c-usedfor  { width: 95px; }
+    col.c-allotted { width: 115px; }
+    col.c-parallel { width: 75px; }
+    col.c-build    { width: 88px; }
+    col.c-tests    { width: 85px; }
+    col.c-testsuite{ width: 140px; }
+    col.c-health   { width: 120px; }
+    col.c-issues   { width: 90px; }
+    col.c-customer { width: 100px; }
+    col.c-shipdate { width: 120px; }
+    col.c-notes    { width: 160px; }
+    col.c-del      { width: 40px; }
+
+    thead tr {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    th {
+      background: rgba(14, 20, 35, 0.97);
+      backdrop-filter: blur(8px);
+      text-align: left;
+      padding: 11px 12px;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .7px;
+      white-space: nowrap;
+      user-select: none;
+      border-bottom: 1px solid var(--border);
+    }
+
+    tbody tr {
+      border-bottom: 1px solid rgba(31,45,69,0.6);
+      transition: background .12s;
+    }
+    tbody tr:nth-child(even) {
+      background: rgba(26, 34, 53, 0.35);
+    }
+    tbody tr:hover {
+      background: linear-gradient(90deg, rgba(59,130,246,0.06) 0%, rgba(26,34,53,0.9) 100%);
+    }
+
+    td {
+      padding: 9px 12px;
+      vertical-align: middle;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Notes column wraps */
+    td:nth-child(17) {
+      white-space: normal;
+      word-break: break-word;
+    }
+
+    /* ── Editable Cells ──────────────────────────────────────── */
+    .editable {
+      outline: none;
+      border-radius: 5px;
+      padding: 3px 6px;
+      min-width: 40px;
+      display: block;
+      transition: background .15s, box-shadow .15s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+    .editable:hover { background: rgba(59,130,246,.08); cursor: text; }
+    .editable:focus {
+      background: rgba(59,130,246,.13);
+      box-shadow: 0 0 0 2px rgba(59,130,246,.35);
+      white-space: normal;
+      overflow: visible;
+      position: relative;
+      z-index: 2;
+    }
+    .editable.empty { color: var(--muted); font-style: italic; }
+
+    /* ── Editable Select ─────────────────────────────────────── */
+    .cell-select {
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      outline: none;
+      cursor: pointer;
+      border-radius: 4px;
+      padding: 3px 4px;
+      width: 100%;
+    }
+    .cell-select:hover { background: rgba(59,130,246,.08); }
+    .cell-select:focus { background: rgba(59,130,246,.12); box-shadow: 0 0 0 2px rgba(59,130,246,.4); }
+    .cell-select option { background: var(--surface2); color: var(--text); }
+
+    /* ── Badges ──────────────────────────────────────────────── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .3px;
+      pointer-events: none;
+    }
+    .badge::before {
+      content: '';
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 5px currentColor;
+    }
+    .badge.Active  { color: var(--success); background: rgba(34,197,94,.12);   box-shadow: 0 0 10px rgba(34,197,94,.1); }
+    .badge.Ready   { color: var(--brand);   background: rgba(59,130,246,.12);  box-shadow: 0 0 10px rgba(59,130,246,.1); }
+    .badge.Down    { color: var(--danger);  background: rgba(239,68,68,.12);   box-shadow: 0 0 10px rgba(239,68,68,.1); }
+    .badge.Shipped { color: var(--warn);    background: rgba(245,158,11,.12);  box-shadow: 0 0 10px rgba(245,158,11,.1); }
+    .badge.Idle    { color: var(--muted);   background: rgba(100,116,139,.12); }
+
+    /* Status cell wraps badge + hidden select */
+    .status-cell { position: relative; cursor: pointer; }
+    .status-cell .cell-select {
+      position: absolute; inset: 0;
+      opacity: 0;
+      width: 100%;
+      cursor: pointer;
+    }
+
+    /* ── Suite Picker ────────────────────────────────────────── */
+    .suite-picker {
+      position: relative;
+      width: 100%;
+    }
+    .suite-trigger {
+      width: 100%;
+      color: var(--text);
+      padding: 5px 8px;
+      font-size: 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: rgba(59,130,246,0.06);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: block;
+      text-align: left;
+    }
+    .suite-trigger:hover {
+      border-color: var(--brand);
+      background: rgba(59,130,246,0.12);
+      opacity: 1;
+    }
+
+    /* Hover reveal source targets */
+    .hover-reveal { cursor: default; }
+    .editable.hover-reveal { cursor: text; }
+    .suite-trigger.hover-reveal { cursor: pointer; }
+
+    /* Floating tooltip (fixed width, dynamic height, capsule corners) */
+    #hover-tooltip {
+      position: fixed;
+      width: 320px;
+      max-width: min(320px, calc(100vw - 24px));
+      max-height: min(65vh, 520px);
+      overflow-y: auto;
+      background: linear-gradient(180deg, #0f1930 0%, #0b1428 100%);
+      color: var(--text);
+      border: 1px solid rgba(59,130,246,0.48);
+      border-radius: 50px;
+      box-shadow: 0 16px 36px rgba(0,0,0,0.55), 0 0 0 1px rgba(59,130,246,0.18);
+      padding: 12px 18px;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-line;
+      word-break: break-word;
+      pointer-events: none;
+      z-index: 1200;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(8px) scale(.98);
+      transition: opacity .15s ease, transform .15s ease, visibility .15s ease;
+    }
+    #hover-tooltip.show {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0) scale(1);
+    }
+    /* Fixed positioning so it's never clipped by overflow:hidden on td */
+    .suite-menu {
+      display: none;
+      position: fixed;
+      width: 300px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px;
+      z-index: 500;
+      box-shadow: 0 12px 36px rgba(0,0,0,0.55), 0 0 0 1px rgba(59,130,246,0.12);
+    }
+    .suite-menu.open { display: block; }
+    .suite-option {
+      display: grid;
+      grid-template-columns: minmax(100px, 1fr) auto auto;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 6px;
+      border-bottom: 1px solid rgba(31, 45, 69, 0.8);
+      border-radius: 4px;
+      transition: background .1s;
+    }
+    .suite-option:hover { background: var(--surface2); }
+    .suite-option:last-child { border-bottom: none; }
+    .suite-name {
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .suite-name.suite-off {
+      color: var(--muted);
+      text-decoration: line-through;
+    }
+    .suite-flag {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+    .suite-flag input { accent-color: var(--brand); }
+
+    /* ── Parallel Toggle ─────────────────────────────────────── */
+    .toggle {
+      width: 36px; height: 20px;
+      border-radius: 10px;
+      background: var(--border);
+      position: relative;
+      cursor: pointer;
+      transition: background .2s, box-shadow .2s;
+      border: none;
+      flex-shrink: 0;
+    }
+    .toggle.on {
+      background: var(--brand);
+      box-shadow: 0 0 10px rgba(59,130,246,0.5);
+    }
+    .toggle::after {
+      content: '';
+      position: absolute;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      top: 3px; left: 3px;
+      transition: transform .2s;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    }
+    .toggle.on::after { transform: translateX(16px); }
+
+    /* ── IP Cell ─────────────────────────────────────────────── */
+    .ip-cell {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .ip-text {
+      font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+      font-size: 12px;
+      color: var(--brand);
+      background: rgba(59,130,246,0.08);
+      border: 1px solid rgba(59,130,246,0.2);
+      border-radius: 5px;
+      padding: 2px 7px;
+      letter-spacing: 0.3px;
+    }
+
+    /* ── Empty & Loading ─────────────────────────────────────── */
+    .empty-row td {
+      text-align: center;
+      padding: 48px;
+      color: var(--muted);
+    }
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid var(--border);
+      border-top-color: var(--brand);
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Toast ───────────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 18px;
+      font-size: 13px;
+      color: var(--text);
+      opacity: 0;
+      transform: translateY(8px);
+      transition: all .25s;
+      z-index: 9999;
+      pointer-events: none;
+      max-width: 300px;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+    #toast.ok   { border-color: var(--success); color: var(--success); box-shadow: 0 0 12px rgba(34,197,94,0.15); }
+    #toast.err  { border-color: var(--danger);  color: var(--danger);  box-shadow: 0 0 12px rgba(239,68,68,0.15); }
+
+    /* ── Modal ───────────────────────────────────────────────── */
+    .modal-backdrop {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.65);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(3px);
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 540px;
+      max-width: 95vw;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(59,130,246,0.1);
+    }
+    .modal-header {
+      padding: 20px 24px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-header h2 { font-size: 16px; font-weight: 600; }
+    .modal-close {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-size: 20px;
+      cursor: pointer;
+      line-height: 1;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .modal-close:hover { color: var(--text); background: var(--surface2); opacity: 1; }
+    .modal-body { padding: 20px 24px; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group.full { grid-column: 1 / -1; }
+    .form-group label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; font-weight: 600; }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 9px 12px;
+      font-size: 13px;
+      font-family: var(--font);
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+    }
+    .form-group select option { background: var(--surface2); }
+    .form-group textarea { resize: vertical; min-height: 70px; }
+    .modal-footer {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    /* Suite list in modal */
+    .suite-list {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    /* ── Scrollbar ───────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(59,130,246,0.2); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(59,130,246,0.4); }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="brand">
+    <div class="brand-icon">⬡</div>
+    Bryck Inventory
+  </div>
+  <div class="header-right">
+    <span id="machine-count" style="color:var(--muted);font-size:12px;"></span>
+    <button class="btn-primary" onclick="openAddModal()">＋ Add Machine</button>
+  </div>
+</header>
+
+<!-- Stats -->
+<div class="stats" id="stats"></div>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="search-wrap">
+    <span class="search-icon">⌕</span>
+    <input type="text" id="search" placeholder="Search IP, hostname, owner…" oninput="renderTable()"/>
+  </div>
+  <select class="filter-select" id="f-status" onchange="renderTable()">
+    <option value="">All Status</option>
+  </select>
+  <select class="filter-select" id="f-type" onchange="renderTable()">
+    <option value="">All Types</option>
+  </select>
+  <select class="filter-select" id="f-used" onchange="renderTable()">
+    <option value="">All Usage</option>
+  </select>
+</div>
+
+<!-- Table -->
+<div class="table-wrap">
+  <table>
+    <colgroup>
+      <col class="c-ip">
+      <col class="c-ibmi">
+      <col class="c-host">
+      <col class="c-type">
+      <col class="c-status">
+      <col class="c-priority">
+      <col class="c-usedfor">
+      <col class="c-allotted">
+      <col class="c-parallel">
+      <col class="c-build">
+      <col class="c-tests">
+      <col class="c-testsuite">
+      <col class="c-health">
+      <col class="c-issues">
+      <col class="c-customer">
+      <col class="c-shipdate">
+      <col class="c-notes">
+      <col class="c-del">
+    </colgroup>
+    <thead>
+      <tr>
+        <th>IP Address</th>
+        <th>IBMi/BMC</th>
+        <th>Hostname</th>
+        <th>Type</th>
+        <th>Status</th>
+        <th>Priority</th>
+        <th>Used For</th>
+        <th>Allotted To</th>
+        <th>Parallel</th>
+        <th>Build</th>
+        <th>Tests</th>
+        <th>Test Status</th>
+        <th>Health</th>
+        <th>Issues</th>
+        <th>Customer</th>
+        <th>Ship Date</th>
+        <th>Notes</th>
+        <th>Delete</th>
+        <!-- <th></th> -->
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Add Machine Modal -->
+<div class="modal-backdrop" id="modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Add Machine</h2>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>IP Address *</label>
+          <input id="f-ip" placeholder="192.168.1.10" />
+        </div>
+        <div class="form-group">
+          <label>Hostname</label>
+          <input id="f-hostname" placeholder="bryck-lab-01" />
+        </div>
+        <div class="form-group">
+          <label>IBMi/BMC</label>
+          <input id="f-ibmi-bmc" placeholder="192.168.1.11" />
+        </div>
+        <div class="form-group">
+          <label>Machine Type</label>
+          <select id="f-mtype"></select>
+        </div>
+        <div class="form-group">
+          <label>Status</label>
+          <select id="f-mstatus"></select>
+        </div>
+        <div class="form-group">
+          <label>Priority</label>
+          <select id="f-priority"></select>
+        </div>
+        <div class="form-group">
+          <label>Used For</label>
+          <select id="f-usedfor"></select>
+        </div>
+        <div class="form-group">
+          <label>Allotted To</label>
+          <input id="f-allotted" placeholder="Person or team" />
+        </div>
+        <div class="form-group">
+          <label>Current Build</label>
+          <input id="f-build" placeholder="0.0.0.0" />
+        </div>
+        <div class="form-group">
+          <label>Tests Completed</label>
+          <input id="f-tests" placeholder="42 or Na" />
+        </div>
+        <div class="form-group">
+          <label>Customer</label>
+          <input id="f-customer" placeholder="AWS" />
+        </div>
+        <div class="form-group">
+          <label>Shipping Date</label>
+          <input id="f-shipdate" type="date" />
+        </div>
+        <div class="form-group">
+          <label>Parallel Use</label>
+          <select id="f-parallel">
+            <option value="false">No</option>
+            <option value="true">Yes</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Active Issues</label>
+          <input id="f-issues" placeholder="Short summary or Na" />
+        </div>
+        <div class="form-group full">
+          <label>Test Status</label>
+          <div class="suite-list" id="f-test-status"></div>
+        </div>
+        <div class="form-group full">
+          <label>Notes</label>
+          <textarea id="f-notes" placeholder="Free text…"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn-primary" onclick="addMachine()">Add Machine</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API = "http://192.168.6.165:8000";
+  const DEFAULT_PRIORITY_OPTIONS = [
+    { label: "High", value: 0 },
+    { label: "Medium", value: 1 },
+    { label: "Low", value: 2 },
+  ];
+  const LIVE_SYNC_INTERVAL_MS = 4000;
+  const HOVER_TOOLTIP_WIDTH = 320;
+  let machines = [];
+  let opts = { status: [], usedFor: [], machineType: [], testSuites: [], priority: DEFAULT_PRIORITY_OPTIONS };
+  let liveSyncTimer = null;
+  let lastInventoryFingerprint = "";
+  let hoverTooltipEl = null;
+  let hoverTargetEl = null;
+
+  async function boot() {
+    try {
+      const [status, usedFor, machineType, testSuites, priority] = await Promise.all([
+        fetch(`${API}/inventory/options/status`).then(r => r.json()),
+        fetch(`${API}/inventory/options/used-for`).then(r => r.json()),
+        fetch(`${API}/inventory/options/machine-type`).then(r => r.json()),
+        fetch(`${API}/inventory/options/test-suites`).then(r => r.json()),
+        fetch(`${API}/inventory/options/priority`).then(r => r.json()),
+      ]);
+
+      opts.status = status;
+      opts.usedFor = usedFor;
+      opts.machineType = machineType;
+      opts.testSuites = testSuites;
+      opts.priority = normalizePriorityOptions(priority);
+
+      populateFilters();
+      populateModalSelects();
+      renderModalTestSuites();
+      await loadMachines();
+      startAutoSync();
+    } catch {
+      toast("Failed to load startup data", "err");
+    }
+  }
+
+  function populateFilters() {
+    populateSelect("f-status", opts.status, "All Status");
+    populateSelect("f-type", opts.machineType, "All Types");
+    populateSelect("f-used", opts.usedFor, "All Usage");
+  }
+
+  function populateSelect(id, arr, placeholder) {
+    const el = document.getElementById(id);
+    const first = el.options[0];
+    el.innerHTML = "";
+    if (placeholder && first) {
+      el.appendChild(first);
+    }
+    arr.forEach(v => {
+      const o = new Option(v, v);
+      el.appendChild(o);
+    });
+  }
+
+  function normalizePriorityOptions(rawOptions) {
+    if (!Array.isArray(rawOptions)) {
+      return DEFAULT_PRIORITY_OPTIONS;
+    }
+
+    const normalized = rawOptions
+      .map(item => {
+        if (typeof item !== "object" || item === null) return null;
+        const value = Number(item.value);
+        const label = String(item.label || "").trim();
+        if (!Number.isInteger(value) || !label || value < 0 || value > 2) return null;
+        return { value, label };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.value - b.value);
+
+    return normalized.length ? normalized : DEFAULT_PRIORITY_OPTIONS;
+  }
+
+  function normalizePriorityValue(value) {
+    const parsed = Number(value);
+    if (parsed === 0 || parsed === 1 || parsed === 2) return parsed;
+    return 2;
+  }
+
+  function populateModalSelects() {
+    const blank = '<option value="">- select -</option>';
+    ["f-mtype", "f-mstatus", "f-usedfor", "f-priority"].forEach(id => {
+      document.getElementById(id).innerHTML = blank;
+    });
+
+    opts.machineType.forEach(v => document.getElementById("f-mtype").add(new Option(v, v)));
+    opts.status.forEach(v => document.getElementById("f-mstatus").add(new Option(v, v)));
+    opts.usedFor.forEach(v => document.getElementById("f-usedfor").add(new Option(v, v)));
+    document.getElementById("f-priority").innerHTML = "";
+    opts.priority.forEach(({ label, value }) => {
+      document.getElementById("f-priority").add(new Option(label, String(value)));
+    });
+    document.getElementById("f-priority").value = "2";
+  }
+
+  function renderModalTestSuites() {
+    const wrap = document.getElementById("f-test-status");
+    if (!wrap) return;
+
+    wrap.innerHTML = opts.testSuites.map(suite => `
+      <div class="suite-option">
+        <span class="suite-name suite-off">${suite}</span>
+        <label class="suite-flag">
+          <input
+            type="checkbox"
+            data-role="include"
+            data-suite="${suite}"
+            onchange="toggleModalSuiteInclude(this)"
+          />
+          include
+        </label>
+        <label class="suite-flag">
+          <input type="checkbox" data-role="done" data-suite="${suite}" disabled />      
+          complete
+        </label>
+      </div>
+    `).join("");
+  }
+
+  function toggleModalSuiteInclude(input) {
+    const row = input.closest(".suite-option");
+    if (!row) return;
+
+    const doneInput = row.querySelector('input[data-role="done"]');
+    const name = row.querySelector(".suite-name");
+    if (doneInput) {
+      doneInput.disabled = !input.checked;
+      if (!input.checked) doneInput.checked = false;
+    }
+    if (name) {
+      name.classList.toggle("suite-off", !input.checked);
+    }
+  }
+
+  function getModalTestStatus() {
+    const status = {};
+    document.querySelectorAll("#f-test-status .suite-option").forEach(row => {
+      const includeInput = row.querySelector('input[data-role="include"]');
+      const doneInput = row.querySelector('input[data-role="done"]');
+      if (!includeInput || !doneInput || !includeInput.checked) return;
+
+      status[includeInput.dataset.suite] = !!doneInput.checked;
+    });
+
+    return Object.keys(status).length ? status : null;
+  }
+
+  function normalizeTestStatus(value) {
+    if (!value || typeof value !== "object") return {};
+
+    const out = {};
+    Object.entries(value).forEach(([suite, completed]) => {
+      if (!opts.testSuites.includes(suite)) return;
+      out[suite] = !!completed;
+    });
+    return out;
+  }
+
+  function getTestStatusSummary(value) {
+    const status = normalizeTestStatus(value);
+    const suites = Object.keys(status);
+    if (!suites.length) return "Select tests";
+
+    const done = suites.filter(s => status[s]).length;
+    return `${done}/${suites.length} complete`;
+  }
+
+  function getTestStatusHoverText(value) {
+    const status = normalizeTestStatus(value);
+    const suites = Object.keys(status);
+    if (!suites.length) return "No tests selected";
+    return suites
+      .map(suite => `${suite}: ${status[suite] ? "Complete" : "Pending"}`)
+      .join("\n");
+  }
+
+  function renderSuiteMenu(machine) {
+    const status = normalizeTestStatus(machine.test_status);
+
+    return `
+      <div class="suite-picker">
+        <button class="btn-ghost suite-trigger hover-reveal" data-machine-id="${machine.id}" onclick="toggleSuiteMenu(event, ${machine.id})">
+          ${getTestStatusSummary(status)}
+        </button>
+        <div class="suite-menu" id="suite-menu-${machine.id}" onclick="event.stopPropagation()">
+          ${opts.testSuites.map(suite => {
+            const included = Object.prototype.hasOwnProperty.call(status, suite);
+            const done = included ? status[suite] : false;
+
+            return `
+              <div class="suite-option">
+                <span class="suite-name ${included ? "" : "suite-off"}">${suite}</span>
+                <label class="suite-flag">
+                  <input
+                    type="checkbox"
+                    data-machine-id="${machine.id}"
+                    data-suite="${suite}"
+                    data-kind="include"
+                    ${included ? "checked" : ""}
+                    onchange="onSuiteToggle(this)"
+                  />
+                  include
+                </label>
+                <label class="suite-flag">
+                  <input
+                    type="checkbox"
+                    data-machine-id="${machine.id}"
+                    data-suite="${suite}"
+                    data-kind="done"
+                    ${done ? "checked" : ""}
+                    ${included ? "" : "disabled"}
+                    onchange="onSuiteToggle(this)"
+                  />
+                  complete
+                </label>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  function closeAllSuiteMenus(exceptMachineId = null) {
+    document.querySelectorAll(".suite-menu.open").forEach(menu => {
+      if (exceptMachineId && menu.id === `suite-menu-${exceptMachineId}`) return;
+      menu.classList.remove("open");
+    });
+  }
+
+  function toggleSuiteMenu(event, machineId) {
+    event.stopPropagation();
+    const menu = document.getElementById(`suite-menu-${machineId}`);
+    if (!menu) return;
+
+    const shouldOpen = !menu.classList.contains("open");
+    closeAllSuiteMenus(machineId);
+
+    if (shouldOpen) {
+      // Anchor the fixed dropdown under the trigger button
+      const btn = event.currentTarget;
+      const rect = btn.getBoundingClientRect();
+      menu.style.top  = (rect.bottom + 6) + "px";
+      menu.style.left = rect.left + "px";
+      menu.classList.add("open");
+    }
+  }
+
+  async function onSuiteToggle(input) {
+    const machineId = Number(input.dataset.machineId);
+    const suite = input.dataset.suite;
+    const kind = input.dataset.kind;
+
+    const machine = machines.find(m => m.id === machineId);
+    if (!machine || !suite || !kind) return;
+
+    const status = normalizeTestStatus(machine.test_status);
+    const row = input.closest(".suite-option");
+    const doneInput = row ? row.querySelector('input[data-kind="done"]') : null;
+    const includeInput = row ? row.querySelector('input[data-kind="include"]') : null;
+    const name = row ? row.querySelector(".suite-name") : null;
+
+    if (kind === "include") {
+      if (input.checked) {
+        status[suite] = status[suite] ?? false;
+      } else {
+        delete status[suite];
+      }
+    } else if (kind === "done") {
+      if (!Object.prototype.hasOwnProperty.call(status, suite)) return;
+      status[suite] = input.checked;
+    }
+
+    if (doneInput && includeInput) {
+      doneInput.disabled = !includeInput.checked;
+      if (!includeInput.checked) doneInput.checked = false;
+    }
+    if (name && includeInput) {
+      name.classList.toggle("suite-off", !includeInput.checked);
+    }
+
+    const payload = Object.keys(status).length ? status : {};
+    await patch(machineId, { test_status: payload }, { rerenderTable: true, quiet: true });
+  }
+
+  function inventoryFingerprint(list) {
+    return list
+      .map(m => JSON.stringify(m))
+      .sort()
+      .join("|");
+  }
+
+  function isEditingNow() {
+    const active = document.activeElement;
+    if (!active) return false;
+    return active.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName);
+  }
+
+  function refreshHoverText() {
+    document.querySelectorAll(".editable.hover-reveal").forEach(el => {
+      el.dataset.hoverText = (el.innerText || "").trim();
+    });
+
+    document.querySelectorAll(".suite-trigger.hover-reveal").forEach(btn => {
+      const machineId = Number(btn.dataset.machineId);
+      const machine = machines.find(m => m.id === machineId);
+      btn.dataset.hoverText = machine ? getTestStatusHoverText(machine.test_status) : "";
+    });
+  }
+
+  function ensureHoverTooltip() {
+    if (hoverTooltipEl) return hoverTooltipEl;
+
+    hoverTooltipEl = document.createElement("div");
+    hoverTooltipEl.id = "hover-tooltip";
+    hoverTooltipEl.setAttribute("role", "tooltip");
+    document.body.appendChild(hoverTooltipEl);
+    return hoverTooltipEl;
+  }
+
+  function positionHoverTooltip(target = hoverTargetEl) {
+    if (!target) return;
+    const tooltip = ensureHoverTooltip();
+    if (!tooltip.classList.contains("show")) return;
+
+    const pad = 12;
+    const rect = target.getBoundingClientRect();
+    const tooltipWidth = Math.min(HOVER_TOOLTIP_WIDTH, window.innerWidth - (pad * 2));
+    tooltip.style.width = `${tooltipWidth}px`;
+
+    const height = tooltip.offsetHeight || 0;
+    let left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
+    left = Math.max(pad, Math.min(left, window.innerWidth - tooltipWidth - pad));
+
+    let top = rect.top - height - 10;
+    if (top < pad) {
+      top = Math.min(window.innerHeight - height - pad, rect.bottom + 10);
+    }
+
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+  }
+
+  function showHoverTooltip(target) {
+    if (!target) return;
+    if (target.isContentEditable && target === document.activeElement) return;
+
+    const text = (target.dataset.hoverText || "").trim();
+    if (!text) return;
+
+    const tooltip = ensureHoverTooltip();
+    hoverTargetEl = target;
+    tooltip.textContent = text;
+    tooltip.classList.add("show");
+    positionHoverTooltip(target);
+  }
+
+  function hideHoverTooltip() {
+    if (!hoverTooltipEl) return;
+    hoverTargetEl = null;
+    hoverTooltipEl.classList.remove("show");
+  }
+
+  function initHoverTooltip() {
+    ensureHoverTooltip();
+
+    document.addEventListener("mouseover", e => {
+      const target = e.target.closest(".hover-reveal");
+      if (!target) return;
+      showHoverTooltip(target);
+    });
+
+    document.addEventListener("mouseout", e => {
+      const from = e.target.closest(".hover-reveal");
+      if (!from) return;
+
+      const to = e.relatedTarget && e.relatedTarget.closest
+        ? e.relatedTarget.closest(".hover-reveal")
+        : null;
+
+      if (from === to) return;
+      if (hoverTargetEl === from) {
+        hideHoverTooltip();
+      }
+    });
+
+    document.addEventListener("focusin", e => {
+      const target = e.target.closest(".hover-reveal");
+      if (!target) return;
+      showHoverTooltip(target);
+    });
+
+    document.addEventListener("focusout", e => {
+      const target = e.target.closest(".hover-reveal");
+      if (!target) return;
+      if (hoverTargetEl === target) {
+        hideHoverTooltip();
+      }
+    });
+
+    window.addEventListener("scroll", () => positionHoverTooltip(), true);
+    window.addEventListener("resize", () => positionHoverTooltip());
+  }
+
+  async function loadMachines(options = {}) {
+    const showLoading = options.showLoading !== false;
+    const silentError = options.silentError === true;
+
+    if (showLoading) {
+      document.getElementById("tbody").innerHTML =
+        `<tr class="empty-row"><td colspan="18"><span class="spinner"></span></td></tr>`;
+    }
+
+    try {
+      const res = await fetch(`${API}/inventory`);
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res));
+      }
+
+      const nextMachines = await res.json();
+      const nextFingerprint = inventoryFingerprint(nextMachines);
+      const changed = nextFingerprint !== lastInventoryFingerprint;
+
+      machines = nextMachines;
+      lastInventoryFingerprint = nextFingerprint;
+
+      if (showLoading || changed) {
+        renderTable();
+        renderStats();
+      }
+    } catch (err) {
+      if (!silentError) {
+        toast(err.message || "Failed to load inventory", "err");
+      }
+    }
+  }
+
+  function startAutoSync() {
+    if (liveSyncTimer) {
+      clearInterval(liveSyncTimer);
+    }
+
+    liveSyncTimer = setInterval(async () => {
+      if (document.hidden || isEditingNow()) return;
+      await loadMachines({ showLoading: false, silentError: true });
+    }, LIVE_SYNC_INTERVAL_MS);
+  }
+
+  function renderStats() {
+    const counts = machines.reduce((acc, m) => {
+      acc.total++;
+      acc[m.status] = (acc[m.status] || 0) + 1;
+      return acc;
+    }, { total: 0 });
+
+    document.getElementById("machine-count").textContent =
+      `${counts.total} machine${counts.total !== 1 ? "s" : ""}`;
+
+    document.getElementById("stats").innerHTML = [
+      ["Total",   counts.total,        "total"],
+      ["Active",  counts.Active  || 0, "active"],
+      ["Down",    counts.Down    || 0, "down"],
+      ["Shipped", counts.Shipped || 0, "shipped"],
+      ["Idle",    counts.Idle    || 0, "total"],
+    ].map(([label, val, cls]) => `
+      <div class="stat">
+        <div class="stat-label">${label}</div>
+        <div class="stat-value ${cls}">${val}</div>
+      </div>
+    `).join("");
+  }
+
+  function renderTable() {
+    const q = document.getElementById("search").value.toLowerCase();
+    const fSt = document.getElementById("f-status").value;
+    const fTy = document.getElementById("f-type").value;
+    const fUs = document.getElementById("f-used").value;
+
+    const rows = machines.filter(m => {
+      if (fSt && m.status !== fSt) return false;
+      if (fTy && m.machine_type !== fTy) return false;
+      if (fUs && m.used_for !== fUs) return false;
+      if (q) {
+        const suiteText = Object.keys(normalizeTestStatus(m.test_status)).join(" ");
+        const priorityText = (opts.priority.find(p => p.value === normalizePriorityValue(m.priority)) || {}).label || "";
+        const hay = [
+          m.ip_address,
+          m.ibmi_bmc,
+          m.hostname,
+          priorityText,
+          m.allotted_to,
+          m.customer,
+          m.notes,
+          suiteText,
+        ].join(" ").toLowerCase();
+
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+    rows.sort((a, b) => {
+      const priorityDiff = normalizePriorityValue(a.priority) - normalizePriorityValue(b.priority);
+      if (priorityDiff !== 0) return priorityDiff;
+      const timeA = Date.parse(a.created_at || 0) || 0;
+      const timeB = Date.parse(b.created_at || 0) || 0;
+      return timeB - timeA;
+    });
+
+    const tbody = document.getElementById("tbody");
+    if (!rows.length) {
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="18">No machines found</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = rows.map(m => `
+      <tr data-id="${m.id}">
+        <td>
+          <div class="ip-cell">
+            <span class="ip-text">${m.ip_address || "-"}</span>
+          </div>
+        </td>
+        <td><span class="editable" contenteditable="true"
+          data-field="ibmi_bmc" data-id="${m.id}"
+          onblur="saveCell(this)" onkeydown="cellKey(event,this)"
+          >${m.ibmi_bmc || ""}</span></td>
+        <td><span class="editable" contenteditable="true"
+          data-field="hostname" data-id="${m.id}"
+          onblur="saveCell(this)" onkeydown="cellKey(event,this)"
+          >${m.hostname || ""}</span></td>
+        <td>
+          <select class="cell-select" data-field="machine_type" data-id="${m.id}"
+            onchange="saveSelect(this)">
+            ${opts.machineType.map(v =>
+              `<option value="${v}" ${m.machine_type === v ? "selected" : ""}>${v}</option>`
+            ).join("")}
+          </select>
+        </td>
+        <td class="status-cell">
+          <span class="badge ${m.status || "Idle"}">${m.status || "Idle"}</span>
+          <select class="cell-select" data-field="status" data-id="${m.id}"
+            onchange="saveStatusSelect(this)">
+            ${opts.status.map(v =>
+              `<option value="${v}" ${m.status === v ? "selected" : ""}>${v}</option>`
+            ).join("")}
+          </select>
+        </td>
+        <td>
+          <select class="cell-select" data-field="priority" data-id="${m.id}"
+            onchange="savePrioritySelect(this)">
+            ${opts.priority.map(p =>
+              `<option value="${p.value}" ${normalizePriorityValue(m.priority) === p.value ? "selected" : ""}>${p.label}</option>`
+            ).join("")}
+          </select>
+        </td>
+        <td>
+          <select class="cell-select" data-field="used_for" data-id="${m.id}"
+            onchange="saveSelect(this)">
+            ${opts.usedFor.map(v =>
+              `<option value="${v}" ${m.used_for === v ? "selected" : ""}>${v}</option>`
+            ).join("")}
+          </select>
+        </td>
+        <td><span class="editable" contenteditable="true"
+          data-field="allotted_to" data-id="${m.id}"
+          onblur="saveCell(this)" onkeydown="cellKey(event,this)"
+          >${m.allotted_to || ""}</span></td>
+        <td style="text-align:center">
+          <button class="toggle ${m.can_parallel ? "on" : ""}"
+            data-field="can_parallel" data-id="${m.id}"
+            onclick="toggleParallel(this)"></button>
+        </td>
+        <td><span class="editable" contenteditable="true"
+          data-field="current_build" data-id="${m.id}"
+          onblur="saveCell(this)" onkeydown="cellKey(event,this)"
+          >${m.current_build || ""}</span></td>
+        <td><span class="editable" contenteditable="true"
+          data-field="tests_completed" data-id="${m.id}"
+          onblur="saveCell(this)" onkeydown="cellKey(event,this)"
+          >${m.tests_completed || ""}</span></td>
+        <td>${renderSuiteMenu(m)}</td>
+        <td><span class="editable" contenteditable="true"
+          data-field="last_health_status" data-id="${m.id}"
+          onblur="saveCell(this)" onkeydown="cellKey(event,this)"
+          >${m.last_health_status || ""}</span></td>
+        <td><span class="editable" contenteditable="true"
+          data-field="active_issues" data-id="${m.id}"
+          onblur="saveCell(this)" onkeydown="cellKey(event,this)"
+          >${m.active_issues || ""}</span></td>
+        <td><span class="editable" contenteditable="true"
+          data-field="customer" data-id="${m.id}"
+          onblur="saveCell(this)" onkeydown="cellKey(event,this)"
+          >${m.customer || ""}</span></td>
+        <td><span class="editable" contenteditable="true"
+          data-field="shipping_date" data-id="${m.id}"
+          onblur="saveCell(this)" onkeydown="cellKey(event,this)"
+          >${m.shipping_date || ""}</span></td>
+        <td><span class="editable" contenteditable="true"
+          data-field="notes" data-id="${m.id}"
+          onblur="saveCell(this)" onkeydown="cellKey(event,this)"
+          style="white-space:pre-wrap"
+          >${m.notes || ""}</span></td>
+        <td>
+          <button class="btn-danger" style="display:block;margin:auto"  onclick="deleteMachine(${m.id})" title="Remove">✕</button>
+        </td>
+      </tr>
+    `).join("");
+
+    tbody.querySelectorAll(".editable").forEach(el => el.classList.add("hover-reveal"));
+    refreshHoverText();
+  }
+
+  function cellKey(e, el) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      el.blur();
+    }
+    if (e.key === "Escape") {
+      el.blur();
+    }
+  }
+
+  async function saveCell(el) {
+    const id = el.dataset.id;
+    const field = el.dataset.field;
+    const value = el.innerText.trim();
+    el.dataset.hoverText = value;
+    await patch(id, { [field]: value || null });
+  }
+
+  async function saveSelect(el) {
+    await patch(el.dataset.id, { [el.dataset.field]: el.value });
+  }
+
+  async function savePrioritySelect(el) {
+    await patch(
+      el.dataset.id,
+      { priority: normalizePriorityValue(el.value) },
+      { rerenderTable: true }
+    );
+  }
+
+  async function saveStatusSelect(el) {
+    const row = el.closest("tr");
+    const badge = row.querySelector(".badge");
+    badge.className = `badge ${el.value}`;
+    badge.textContent = el.value;
+    await patch(el.dataset.id, { status: el.value });
+  }
+
+  async function toggleParallel(btn) {
+    const isOn = btn.classList.toggle("on");
+    await patch(btn.dataset.id, { can_parallel: isOn });
+  }
+
+  async function readErrorMessage(res) {
+    try {
+      const data = await res.json();
+      if (typeof data?.detail === "string") return data.detail;
+      if (Array.isArray(data?.detail)) {
+        return data.detail.map(item => item.msg || JSON.stringify(item)).join(", ");
+      }
+    } catch {
+      // no-op
+    }
+    return "Request failed";
+  }
+
+  async function patch(id, body, options = {}) {
+    try {
+      const res = await fetch(`${API}/inventory/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res));
+      }
+
+      const updated = await res.json();
+      machines = machines.map(m => (m.id == id ? updated : m));
+      lastInventoryFingerprint = inventoryFingerprint(machines);
+      if (options.rerenderTable) {
+        renderTable();
+      }
+      renderStats();
+      refreshHoverText();
+      if (!options.quiet) {
+        toast("Saved", "ok");
+      }
+    } catch (err) {
+      toast(err.message || "Save failed", "err");
+    }
+  }
+
+  async function deleteMachine(id) {
+    if (!confirm("Remove this machine from inventory?")) return;
+
+    const res = await fetch(`${API}/inventory/${id}`, { method: "DELETE" });
+    if (res.ok || res.status === 204) {
+      machines = machines.filter(m => m.id !== id);
+      lastInventoryFingerprint = inventoryFingerprint(machines);
+      renderTable();
+      renderStats();
+      toast("Machine removed", "ok");
+    } else {
+      toast("Delete failed", "err");
+    }
+  }
+
+  function openAddModal() {
+    document.getElementById("modal").classList.add("open");
+  }
+
+  function closeModal() {
+    document.getElementById("modal").classList.remove("open");
+  }
+
+  async function addMachine() {
+    const ip = document.getElementById("f-ip").value.trim();
+    if (!ip) {
+      toast("IP address is required", "err");
+      return;
+    }
+
+    const payload = {
+      ip_address: ip,
+      ibmi_bmc: v("f-ibmi-bmc"),
+      hostname: v("f-hostname"),
+      machine_type: v("f-mtype"),
+      status: v("f-mstatus") || "Ready",
+      priority: normalizePriorityValue(document.getElementById("f-priority").value),
+      used_for: v("f-usedfor"),
+      allotted_to: v("f-allotted"),
+      current_build: v("f-build"),
+      tests_completed: v("f-tests"),
+      test_status: getModalTestStatus(),
+      customer: v("f-customer"),
+      shipping_date: v("f-shipdate") || null,
+      can_parallel: document.getElementById("f-parallel").value === "true",
+      active_issues: v("f-issues"),
+      notes: v("f-notes"),
+    };
+
+    const res = await fetch(`${API}/inventory`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (res.status === 201) {
+      const machine = await res.json();
+      machines.unshift(machine);
+      lastInventoryFingerprint = inventoryFingerprint(machines);
+      renderTable();
+      renderStats();
+      closeModal();
+      clearForm();
+      toast("Machine added", "ok");
+    } else {
+      const message = await readErrorMessage(res);
+      toast(message, "err");
+    }
+  }
+
+  function v(id) {
+    const el = document.getElementById(id);
+    return el ? (el.value.trim() || null) : null;
+  }
+
+  function clearForm() {
+    [
+      "f-ip",
+      "f-ibmi-bmc",
+      "f-hostname",
+      "f-priority",
+      "f-allotted",
+      "f-build",
+      "f-tests",
+      "f-customer",
+      "f-shipdate",
+      "f-issues",
+      "f-notes",
+    ].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = "";
+    });
+    const prioritySelect = document.getElementById("f-priority");
+    if (prioritySelect) prioritySelect.value = "2";
+
+    resetModalTestSuites();
+  }
+
+  function resetModalTestSuites() {
+    document.querySelectorAll("#f-test-status .suite-option").forEach(row => {
+      const includeInput = row.querySelector('input[data-role="include"]');
+      const doneInput = row.querySelector('input[data-role="done"]');
+      const name = row.querySelector(".suite-name");
+
+      if (includeInput) includeInput.checked = false;
+      if (doneInput) {
+        doneInput.checked = false;
+        doneInput.disabled = true;
+      }
+      if (name) {
+        name.classList.add("suite-off");
+      }
+    });
+  }
+
+  let toastTimer;
+  function toast(msg, type = "ok") {
+    const el = document.getElementById("toast");
+    el.textContent = msg;
+    el.className = `show ${type}`;
+
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      el.className = "";
+    }, 2200);
+  }
+
+  document.getElementById("modal").addEventListener("click", e => {
+    if (e.target === e.currentTarget) closeModal();
+  });
+
+  document.addEventListener("click", e => {
+    if (!e.target.closest(".suite-picker")) {
+      closeAllSuiteMenus();
+    }
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && !isEditingNow()) {
+      loadMachines({ showLoading: false, silentError: true });
+    }
+  });
+
+  initHoverTooltip();
+  boot();
+</script>
+</body>
+</html>
