@@ -374,6 +374,41 @@
       background: rgba(59,130,246,0.12);
       opacity: 1;
     }
+
+    /* Hover reveal source targets */
+    .hover-reveal { cursor: default; }
+    .editable.hover-reveal { cursor: text; }
+    .suite-trigger.hover-reveal { cursor: pointer; }
+
+    /* Floating tooltip (fixed width, dynamic height, capsule corners) */
+    #hover-tooltip {
+      position: fixed;
+      width: 320px;
+      max-width: min(320px, calc(100vw - 24px));
+      max-height: min(65vh, 520px);
+      overflow-y: auto;
+      background: linear-gradient(180deg, #0f1930 0%, #0b1428 100%);
+      color: var(--text);
+      border: 1px solid rgba(59,130,246,0.48);
+      border-radius: 50px;
+      box-shadow: 0 16px 36px rgba(0,0,0,0.55), 0 0 0 1px rgba(59,130,246,0.18);
+      padding: 12px 18px;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-line;
+      word-break: break-word;
+      pointer-events: none;
+      z-index: 1200;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(8px) scale(.98);
+      transition: opacity .15s ease, transform .15s ease, visibility .15s ease;
+    }
+    #hover-tooltip.show {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0) scale(1);
+    }
     /* Fixed positioning so it's never clipped by overflow:hidden on td */
     .suite-menu {
       display: none;
@@ -768,14 +803,20 @@
 </div>
 
 <script>
-  const API = "https://districts-gel-papua-yard.trycloudflare.com";
+  const API = "http://localhost:8000";
   const DEFAULT_PRIORITY_OPTIONS = [
     { label: "High", value: 0 },
     { label: "Medium", value: 1 },
     { label: "Low", value: 2 },
   ];
+  const LIVE_SYNC_INTERVAL_MS = 4000;
+  const HOVER_TOOLTIP_WIDTH = 320;
   let machines = [];
   let opts = { status: [], usedFor: [], machineType: [], testSuites: [], priority: DEFAULT_PRIORITY_OPTIONS };
+  let liveSyncTimer = null;
+  let lastInventoryFingerprint = "";
+  let hoverTooltipEl = null;
+  let hoverTargetEl = null;
 
   async function boot() {
     try {
@@ -797,6 +838,7 @@
       populateModalSelects();
       renderModalTestSuites();
       await loadMachines();
+      startAutoSync();
     } catch {
       toast("Failed to load startup data", "err");
     }
@@ -879,7 +921,7 @@
           include
         </label>
         <label class="suite-flag">
-          <input type="checkbox" data-role="done" data-suite="${suite}" checked />
+          <input type="checkbox" data-role="done" data-suite="${suite}" disabled />      
           complete
         </label>
       </div>
@@ -934,12 +976,21 @@
     return `${done}/${suites.length} complete`;
   }
 
+  function getTestStatusHoverText(value) {
+    const status = normalizeTestStatus(value);
+    const suites = Object.keys(status);
+    if (!suites.length) return "No tests selected";
+    return suites
+      .map(suite => `${suite}: ${status[suite] ? "Complete" : "Pending"}`)
+      .join("\n");
+  }
+
   function renderSuiteMenu(machine) {
     const status = normalizeTestStatus(machine.test_status);
 
     return `
       <div class="suite-picker">
-        <button class="btn-ghost suite-trigger" onclick="toggleSuiteMenu(event, ${machine.id})">
+        <button class="btn-ghost suite-trigger hover-reveal" data-machine-id="${machine.id}" onclick="toggleSuiteMenu(event, ${machine.id})">
           ${getTestStatusSummary(status)}
         </button>
         <div class="suite-menu" id="suite-menu-${machine.id}" onclick="event.stopPropagation()">
@@ -1043,14 +1094,167 @@
     await patch(machineId, { test_status: payload }, { rerenderTable: true, quiet: true });
   }
 
-  async function loadMachines() {
-    document.getElementById("tbody").innerHTML =
-      `<tr class="empty-row"><td colspan="18"><span class="spinner"></span></td></tr>`;
+  function inventoryFingerprint(list) {
+    return list
+      .map(m => JSON.stringify(m))
+      .sort()
+      .join("|");
+  }
 
-    const res = await fetch(`${API}/inventory`);
-    machines = await res.json();
-    renderTable();
-    renderStats();
+  function isEditingNow() {
+    const active = document.activeElement;
+    if (!active) return false;
+    return active.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName);
+  }
+
+  function refreshHoverText() {
+    document.querySelectorAll(".editable.hover-reveal").forEach(el => {
+      el.dataset.hoverText = (el.innerText || "").trim();
+    });
+
+    document.querySelectorAll(".suite-trigger.hover-reveal").forEach(btn => {
+      const machineId = Number(btn.dataset.machineId);
+      const machine = machines.find(m => m.id === machineId);
+      btn.dataset.hoverText = machine ? getTestStatusHoverText(machine.test_status) : "";
+    });
+  }
+
+  function ensureHoverTooltip() {
+    if (hoverTooltipEl) return hoverTooltipEl;
+
+    hoverTooltipEl = document.createElement("div");
+    hoverTooltipEl.id = "hover-tooltip";
+    hoverTooltipEl.setAttribute("role", "tooltip");
+    document.body.appendChild(hoverTooltipEl);
+    return hoverTooltipEl;
+  }
+
+  function positionHoverTooltip(target = hoverTargetEl) {
+    if (!target) return;
+    const tooltip = ensureHoverTooltip();
+    if (!tooltip.classList.contains("show")) return;
+
+    const pad = 12;
+    const rect = target.getBoundingClientRect();
+    const tooltipWidth = Math.min(HOVER_TOOLTIP_WIDTH, window.innerWidth - (pad * 2));
+    tooltip.style.width = `${tooltipWidth}px`;
+
+    const height = tooltip.offsetHeight || 0;
+    let left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
+    left = Math.max(pad, Math.min(left, window.innerWidth - tooltipWidth - pad));
+
+    let top = rect.top - height - 10;
+    if (top < pad) {
+      top = Math.min(window.innerHeight - height - pad, rect.bottom + 10);
+    }
+
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+  }
+
+  function showHoverTooltip(target) {
+    if (!target) return;
+    if (target.isContentEditable && target === document.activeElement) return;
+
+    const text = (target.dataset.hoverText || "").trim();
+    if (!text) return;
+
+    const tooltip = ensureHoverTooltip();
+    hoverTargetEl = target;
+    tooltip.textContent = text;
+    tooltip.classList.add("show");
+    positionHoverTooltip(target);
+  }
+
+  function hideHoverTooltip() {
+    if (!hoverTooltipEl) return;
+    hoverTargetEl = null;
+    hoverTooltipEl.classList.remove("show");
+  }
+
+  function initHoverTooltip() {
+    ensureHoverTooltip();
+
+    document.addEventListener("mouseover", e => {
+      const target = e.target.closest(".hover-reveal");
+      if (!target) return;
+      showHoverTooltip(target);
+    });
+
+    document.addEventListener("mouseout", e => {
+      const from = e.target.closest(".hover-reveal");
+      if (!from) return;
+
+      const to = e.relatedTarget && e.relatedTarget.closest
+        ? e.relatedTarget.closest(".hover-reveal")
+        : null;
+
+      if (from === to) return;
+      if (hoverTargetEl === from) {
+        hideHoverTooltip();
+      }
+    });
+
+    document.addEventListener("focusin", e => {
+      const target = e.target.closest(".hover-reveal");
+      if (!target) return;
+      showHoverTooltip(target);
+    });
+
+    document.addEventListener("focusout", e => {
+      const target = e.target.closest(".hover-reveal");
+      if (!target) return;
+      if (hoverTargetEl === target) {
+        hideHoverTooltip();
+      }
+    });
+
+    window.addEventListener("scroll", () => positionHoverTooltip(), true);
+    window.addEventListener("resize", () => positionHoverTooltip());
+  }
+
+  async function loadMachines(options = {}) {
+    const showLoading = options.showLoading !== false;
+    const silentError = options.silentError === true;
+
+    if (showLoading) {
+      document.getElementById("tbody").innerHTML =
+        `<tr class="empty-row"><td colspan="18"><span class="spinner"></span></td></tr>`;
+    }
+
+    try {
+      const res = await fetch(`${API}/inventory`);
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res));
+      }
+
+      const nextMachines = await res.json();
+      const nextFingerprint = inventoryFingerprint(nextMachines);
+      const changed = nextFingerprint !== lastInventoryFingerprint;
+
+      machines = nextMachines;
+      lastInventoryFingerprint = nextFingerprint;
+
+      if (showLoading || changed) {
+        renderTable();
+        renderStats();
+      }
+    } catch (err) {
+      if (!silentError) {
+        toast(err.message || "Failed to load inventory", "err");
+      }
+    }
+  }
+
+  function startAutoSync() {
+    if (liveSyncTimer) {
+      clearInterval(liveSyncTimer);
+    }
+
+    liveSyncTimer = setInterval(async () => {
+      if (document.hidden || isEditingNow()) return;
+      await loadMachines({ showLoading: false, silentError: true });
+    }, LIVE_SYNC_INTERVAL_MS);
   }
 
   function renderStats() {
@@ -1211,6 +1415,9 @@
         </td>
       </tr>
     `).join("");
+
+    tbody.querySelectorAll(".editable").forEach(el => el.classList.add("hover-reveal"));
+    refreshHoverText();
   }
 
   function cellKey(e, el) {
@@ -1227,6 +1434,7 @@
     const id = el.dataset.id;
     const field = el.dataset.field;
     const value = el.innerText.trim();
+    el.dataset.hoverText = value;
     await patch(id, { [field]: value || null });
   }
 
@@ -1282,10 +1490,12 @@
 
       const updated = await res.json();
       machines = machines.map(m => (m.id == id ? updated : m));
+      lastInventoryFingerprint = inventoryFingerprint(machines);
       if (options.rerenderTable) {
         renderTable();
       }
       renderStats();
+      refreshHoverText();
       if (!options.quiet) {
         toast("Saved", "ok");
       }
@@ -1300,6 +1510,7 @@
     const res = await fetch(`${API}/inventory/${id}`, { method: "DELETE" });
     if (res.ok || res.status === 204) {
       machines = machines.filter(m => m.id !== id);
+      lastInventoryFingerprint = inventoryFingerprint(machines);
       renderTable();
       renderStats();
       toast("Machine removed", "ok");
@@ -1351,6 +1562,7 @@
     if (res.status === 201) {
       const machine = await res.json();
       machines.unshift(machine);
+      lastInventoryFingerprint = inventoryFingerprint(machines);
       renderTable();
       renderStats();
       closeModal();
@@ -1429,6 +1641,13 @@
     }
   });
 
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && !isEditingNow()) {
+      loadMachines({ showLoading: false, silentError: true });
+    }
+  });
+
+  initHoverTooltip();
   boot();
 </script>
 </body>
