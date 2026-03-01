@@ -4,9 +4,9 @@ from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime
-
+from contextlib import asynccontextmanager, suppress
 import asyncio
-
+import importlib.util
 import logging
 import os
 from pathlib import Path
@@ -33,6 +33,10 @@ PRIORITY_OPTIONS = [
     {"label": "Medium", "value": 1},
     {"label": "Low", "value": 2},
 ]
+SLACK_SYNC_INTERVAL_SECONDS = int("10")
+
+logger = logging.getLogger(__name__)
+slack_sync_task: Optional[asyncio.Task] = None
 
 Base.metadata.create_all(bind=engine)
 
@@ -84,6 +88,40 @@ def normalize_priority(priority: Optional[int]) -> Optional[int]:
 
 
 ensure_machine_columns()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global slack_sync_task
+
+    # Startup: send one snapshot immediately.
+    startup_db = SessionLocal()
+    try:
+        send_all_inventory_to_slack(startup_db)
+    except RuntimeError as exc:
+        logger.warning("Startup Slack sync skipped: %s", exc)
+    except Exception:
+        logger.exception("Startup Slack inventory sync failed")
+    finally:
+        startup_db.close()
+
+    # Startup: begin periodic sync.
+    if SLACK_SYNC_INTERVAL_SECONDS > 0:
+        if not slack_sync_task or slack_sync_task.done():
+            slack_sync_task = asyncio.create_task(periodic_inventory_slack_sync())
+            logger.info("Started periodic Slack sync every %s seconds", SLACK_SYNC_INTERVAL_SECONDS)
+    else:
+        logger.info("Periodic Slack sync disabled (SLACK_SYNC_INTERVAL_SECONDS <= 0)")
+
+    try:
+        yield
+    finally:
+        # Shutdown: stop periodic sync task.
+        if slack_sync_task:
+            slack_sync_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await slack_sync_task
+            slack_sync_task = None
+
 
 app = FastAPI(title="Bryck Inventory API", version="1.0.0")
 
@@ -248,6 +286,8 @@ def edit_machine(machine_id: int, payload: MachineUpdate, db: Session = Depends(
     return machine
 
 
+
+
 # ── Inventory: Remove machine ─────────────────────────────────────
 @app.delete("/inventory/{machine_id}", status_code=204)
 def remove_machine(machine_id: int, db: Session = Depends(get_db)):
@@ -256,6 +296,104 @@ def remove_machine(machine_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Machine not found")
     db.delete(machine)
     db.commit()
+
+
+
+
+def send_all_inventory_to_slack(db: Session) -> list[Machine]:
+    """
+    Loads all inventory rows from DB and sends them to Slack.
+    Returns the loaded machine list.
+    """
+    import httpx
+
+    webhook_url = "https://hooks.slack.com/services/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"
+    if not webhook_url:
+        raise RuntimeError("Slack webhook `url` is empty in test_slack.py")
+
+    machines = db.query(Machine).order_by(Machine.created_at.desc()).all()
+    priority_label = {p["value"]: p["label"] for p in PRIORITY_OPTIONS}
+
+    headers = [
+        "IP", "Host", "Type", "Status",
+        "Priority", "Used For", "Allotted To",
+        "Customer", "Ship Date"
+    ]
+
+    rows = []
+
+    for m in machines:
+        ship_date = m.shipping_date.isoformat() if m.shipping_date else "NA"
+
+        rows.append([
+            str(m.ip_address or "NA"),
+            str(m.hostname or "NA"),
+            str(m.machine_type or "NA"),
+            str(m.status or "NA"),
+            str(priority_label.get(m.priority, m.priority) or "NA"),
+            str(m.used_for or "NA"),
+            str(m.allotted_to or "NA"),
+            str(m.customer or "NA"),
+            ship_date,
+        ])
+
+    if rows:
+        # Compute dynamic column widths
+        col_widths = [
+            max(len(str(row[i])) for row in ([headers] + rows))
+            for i in range(len(headers))
+        ]
+
+        # Header line
+        header_line = " | ".join(
+            headers[i].ljust(col_widths[i])
+            for i in range(len(headers))
+        )
+
+        # Divider
+        divider = "-+-".join(
+            "-" * col_widths[i]
+            for i in range(len(headers))
+        )
+
+        # Data lines
+        data_lines = [
+            " | ".join(
+                row[i].ljust(col_widths[i])
+                for i in range(len(headers))
+            )
+            for row in rows
+        ]
+
+        table = "\n".join([header_line, divider] + data_lines)
+        text = "*📦 Inventory Snapshot*\n```" + table + "```"
+
+    else:
+        text = "*📦 Inventory Snapshot*\n_No machines found._"
+
+    with httpx.Client(timeout=15) as client:
+        resp = client.post(webhook_url, json={"text": text})
+
+    if resp.status_code != 200:
+        raise RuntimeError(f"Slack webhook failed: {resp.status_code} - {resp.text}")
+
+    return machines
+
+
+async def periodic_inventory_slack_sync() -> None:
+    while True:
+        db = SessionLocal()
+        try:
+            send_all_inventory_to_slack(db)
+        except RuntimeError as exc:
+            logger.warning("Periodic Slack sync skipped: %s", exc)
+        except Exception:
+            logger.exception("Periodic Slack inventory sync failed")
+        finally:
+            db.close()
+
+        await asyncio.sleep(SLACK_SYNC_INTERVAL_SECONDS)
+
 
 
 # ── Dropdown options (for frontend selects) ───────────────────────
