@@ -307,7 +307,7 @@ def send_all_inventory_to_slack(db: Session) -> list[Machine]:
     """
     import httpx
 
-    webhook_url = "https://hooks.slack.com/services/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"
+    webhook_url = ""
     if not webhook_url:
         raise RuntimeError("Slack webhook `url` is empty in test_slack.py")
 
