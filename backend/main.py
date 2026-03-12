@@ -282,7 +282,7 @@ def priority_options():
 import json
 import requests 
 from fastapi import Request
-SLACK_BOT_TOKEN = "xoxb-1493325414615-10592045094117-6vsmOER8xpB5z3QdMrrqOKrM"
+SLACK_BOT_TOKEN = ""
 
 
 @app.post("/slack/add_machine")
