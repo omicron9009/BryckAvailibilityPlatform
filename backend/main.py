@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query 
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
@@ -279,3 +279,316 @@ def test_suite_options():
 def priority_options():
     return PRIORITY_OPTIONS
 
+import json
+import requests 
+from fastapi import Request
+SLACK_BOT_TOKEN = "xoxb-1493325414615-10592045094117-6vsmOER8xpB5z3QdMrrqOKrM"
+
+
+@app.post("/slack/add_machine")
+async def open_add_machine_modal(trigger_id: str = Form(...)):
+
+    def text_input(block_id, label, action_id, optional=True, multiline=False):
+        block = {
+            "type": "input",
+            "block_id": block_id,
+            "label": {"type": "plain_text", "text": label},
+            "element": {
+                "type": "plain_text_input",
+                "action_id": action_id,
+                **({"multiline": True} if multiline else {})
+            }
+        }
+        if optional:
+            block["optional"] = True
+        return block
+
+    modal = {
+        "type": "modal",
+        "callback_id": "add_machine_modal",
+        "title": {"type": "plain_text", "text": "Add Machine"},
+        "submit": {"type": "plain_text", "text": "Add"},
+        "blocks": [
+
+            # Required field
+            {
+                "type": "input",
+                "block_id": "ip_block",
+                "label": {"type": "plain_text", "text": "IP Address"},
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "ip_input",
+                    "placeholder": {"type": "plain_text", "text": "10.10.20.5"}
+                }
+            },
+
+            {
+                "type": "input",
+                "block_id": "hostname_block",
+                "optional": True,
+                "label": {"type": "plain_text", "text": "Hostname"},
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "hostname_input"
+                }
+            },
+
+            {
+                "type": "input",
+                "block_id": "bmc_block",
+                "optional": True,
+                "label": {"type": "plain_text", "text": "IBMi / BMC"},
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "bmc_input"
+                }
+            },
+
+            # Machine type dropdown
+            {
+                "type": "input",
+                "block_id": "machine_type_block",
+                "optional": True,
+                "label": {"type": "plain_text", "text": "Machine Type"},
+                "element": {
+                    "type": "static_select",
+                    "action_id": "machine_type_input",
+                    "options": [
+                        {"text": {"type": "plain_text", "text": "Bryck"}, "value": "Bryck"},
+                        {"text": {"type": "plain_text", "text": "BryckMini"}, "value": "BryckMini"}
+                    ]
+                }
+            },
+
+            # Status dropdown
+            {
+                "type": "input",
+                "block_id": "status_block",
+                "optional": True,
+                "label": {"type": "plain_text", "text": "Status"},
+                "element": {
+                    "type": "static_select",
+                    "action_id": "status_input",
+                    "options": [
+                        {"text": {"type": "plain_text", "text": "Active"}, "value": "Active"},
+                        {"text": {"type": "plain_text", "text": "Ready"}, "value": "Ready"},
+                        {"text": {"type": "plain_text", "text": "Down"}, "value": "Down"},
+                        {"text": {"type": "plain_text", "text": "Shipped"}, "value": "Shipped"},
+                        {"text": {"type": "plain_text", "text": "Idle"}, "value": "Idle"}
+                    ]
+                }
+            },
+
+            # Priority dropdown
+            {
+                "type": "input",
+                "block_id": "priority_block",
+                "optional": True,
+                "label": {"type": "plain_text", "text": "Priority"},
+                "element": {
+                    "type": "static_select",
+                    "action_id": "priority_input",
+                    "options": [
+                        {"text": {"type": "plain_text", "text": "High"}, "value": "0"},
+                        {"text": {"type": "plain_text", "text": "Medium"}, "value": "1"},
+                        {"text": {"type": "plain_text", "text": "Low"}, "value": "2"}
+                    ]
+                }
+            },
+
+            {
+                "type": "input",
+                "block_id": "used_for_block",
+                "optional": True,
+                "label": {"type": "plain_text", "text": "Used For"},
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "used_for_input"
+                }
+            },
+
+            {
+                "type": "input",
+                "block_id": "allotted_block",
+                "optional": True,
+                "label": {"type": "plain_text", "text": "Allotted To"},
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "allotted_input"
+                }
+            },
+
+            # Boolean toggle
+            {
+                "type": "input",
+                "block_id": "parallel_block",
+                "optional": True,
+                "label": {"type": "plain_text", "text": "Can Run Parallel Tests"},
+                "element": {
+                    "type": "checkboxes",
+                    "action_id": "parallel_input",
+                    "options": [
+                        {
+                            "text": {"type": "plain_text", "text": "Enabled"},
+                            "value": "true"
+                        }
+                    ]
+                }
+            },
+
+            {
+                "type": "input",
+                "block_id": "build_block",
+                "optional": True,
+                "label": {"type": "plain_text", "text": "Current Build"},
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "build_input"
+                }
+            },
+
+            {
+                "type": "input",
+                "block_id": "issues_block",
+                "optional": True,
+                "label": {"type": "plain_text", "text": "Active Issues"},
+                "element": {
+                    "type": "plain_text_input",
+                    "multiline": True,
+                    "action_id": "issues_input"
+                }
+            },
+
+            {
+                "type": "input",
+                "block_id": "customer_block",
+                "optional": True,
+                "label": {"type": "plain_text", "text": "Customer"},
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "customer_input"
+                }
+            },
+
+            {
+                "type": "input",
+                "block_id": "ship_block",
+                "optional": True,
+                "label": {"type": "plain_text", "text": "Shipping Date"},
+                "element": {
+                    "type": "datepicker",
+                    "action_id": "ship_input"
+                }
+            },
+
+            {
+                "type": "input",
+                "block_id": "notes_block",
+                "optional": True,
+                "label": {"type": "plain_text", "text": "Notes"},
+                "element": {
+                    "type": "plain_text_input",
+                    "multiline": True,
+                    "action_id": "notes_input"
+                }
+            }
+        ]
+    }
+
+    response = requests.post(
+        "https://slack.com/api/views.open",
+        headers={
+            "Authorization": f"Bearer {SLACK_BOT_TOKEN}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "trigger_id": trigger_id,
+            "view": modal
+        }
+    )
+
+    if not response.json().get("ok"):
+        print("❌ Failed to open modal:", response.json())
+
+    return "Machine adding"
+
+
+# ─────────────────────────────────────────────
+# STEP 2: Modal submission → insert into DB
+# ─────────────────────────────────────────────
+
+@app.post("/slack/inventory")
+async def handle_modal_submission(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+
+    form = await request.form()
+    payload_raw = form.get("payload")
+
+    if not payload_raw:
+        print("❌ No payload received")
+        return {"response_action": "clear"}
+
+    payload = json.loads(payload_raw)
+
+    print("\n===== SLACK MODAL SUBMISSION =====")
+    print(payload)
+
+    values = payload["view"]["state"]["values"]
+
+    def get(block, action):
+        return values.get(block, {}).get(action, {}).get("value")
+
+    # ── Extract fields ─────────────────────
+    ip            = get("ip_block", "ip_input")
+    hostname      = get("hostname_block", "hostname_input")
+    bmc           = get("bmc_block", "bmc_input")
+    machine_type  = get("type_block", "type_input")
+    status        = get("status_block", "status_input")
+    priority_raw  = get("priority_block", "priority_input")
+    used_for      = get("used_block", "used_input")
+    allotted_to   = get("allotted_block", "allotted_input")
+    customer      = get("customer_block", "customer_input")
+    notes         = get("notes_block", "notes_input")
+    ship_raw      = get("ship_block", "ship_input")
+
+    # ── Required field validation ──────────
+    if not ip:
+        return {
+            "response_action": "errors",
+            "errors": {"ip_block": "IP address is required"}
+        }
+
+    # ── Type conversions ───────────────────
+    priority = int(priority_raw) if priority_raw else None
+
+    shipping_date = None
+    if ship_raw:
+        try:
+            shipping_date = datetime.fromisoformat(ship_raw).date()
+        except Exception:
+            print("⚠️ Invalid date format:", ship_raw)
+
+    # ── Create Machine object ──────────────
+    machine_data = MachineCreate(
+        ip_address=ip,
+        hostname=hostname,
+        ibmi_bmc=bmc,
+        machine_type=machine_type,
+        status=status,
+        priority=priority,
+        used_for=used_for,
+        allotted_to=allotted_to,
+        customer=customer,
+        notes=notes,
+        shipping_date=shipping_date
+    )
+
+    try:
+        machine = add_machine(machine_data, db)
+        print(f"✅ Machine inserted: {machine.ip_address}")
+    except Exception as e:
+        print("❌ Machine insert failed:", e)
+
+    return {"response_action": "clear"}
